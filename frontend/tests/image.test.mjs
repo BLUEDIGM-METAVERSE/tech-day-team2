@@ -4,7 +4,7 @@ import { resizeImage } from '../src/utils/image.ts';
 
 function setup(width=3200,height=1600,{context=true,drawError=false,url='data:image/png;base64,sample'}={}) {
   let closed=0;
-  const canvas={width:0,height:0,getContext:()=>context ? {drawImage(){if(drawError) throw Error('draw failed');}} : null,toDataURL:()=>url};
+  const canvas={width:0,height:0,getContext:()=>context ? {fillStyle:'',fillRect(){canvas.filled=true;},drawImage(){if(drawError) throw Error('draw failed');}} : null,toDataURL:(type,quality)=>{canvas.outputType=type;canvas.quality=quality;return url;}};
   globalThis.createImageBitmap=async()=>({width,height,close(){closed++;}});
   globalThis.document={createElement:()=>canvas};
   return {canvas,closed:()=>closed};
@@ -23,3 +23,5 @@ test('canvas 실패에도 자원 해제',async()=>{const e=setup(100,100,{contex
 test('그리기 실패에도 자원 해제',async()=>{const e=setup(100,100,{drawError:true});await assert.rejects(resizeImage(file()),/draw failed/);assert.equal(e.closed(),1);});
 test('잘못된 변환 결과 차단 및 자원 해제',async()=>{const e=setup(100,100,{url:'data:,'});await assert.rejects(resizeImage(file()),/변환/);assert.equal(e.closed(),1);});
 test('0 크기 이미지 차단 및 자원 해제',async()=>{const e=setup(0,100);await assert.rejects(resizeImage(file()),/크기/);assert.equal(e.closed(),1);});
+
+test('폰 JPEG 형식·품질·흰 배경 유지',async()=>{const e=setup(3200,1600,{url:'data:image/jpeg;base64,sample'});assert.match(await resizeImage(file(), 'image/jpeg',0.85),/^data:image\/jpeg/);assert.equal(e.canvas.outputType,'image/jpeg');assert.equal(e.canvas.quality,0.85);assert.equal(e.canvas.filled,true);assert.equal(e.closed(),1);});

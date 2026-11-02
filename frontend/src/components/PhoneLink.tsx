@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import qrcode from 'qrcode-generator';
 import { checkRoom, closeRoom, createRoom, isRoomGone, nextImage, type RoomInfo } from '../services/relay';
 
-interface Props { idle: boolean; onImage: (dataUrl: string) => void }
+interface Props { idle: boolean; onImage: (dataUrl: string) => boolean | void }
 const POLL_MS = 2000;
 
 function phoneUrl(room: RoomInfo): string {
@@ -28,6 +28,7 @@ export function PhoneLink({ idle, onImage }: Props) {
   const [closesAt, setClosesAt] = useState(0); // 절대 종료 시각. PC가 폴링하는 동안 유휴 만료는 계속 밀리므로 표시에 쓰지 않는다.
   const [now, setNow] = useState(Date.now());
   const [error, setError] = useState('');
+  const heldImage = useRef<string|null>(null);
   const onImageRef = useRef(onImage); onImageRef.current = onImage;
 
   async function openRoom(previous?: RoomInfo | null) {
@@ -44,11 +45,15 @@ export function PhoneLink({ idle, onImage }: Props) {
     const timer = window.setInterval(async () => {
       if (busy) return; busy = true;
       try {
+        if (idle && heldImage.current) {
+          if (onImageRef.current(heldImage.current) !== false) heldImage.current=null;
+          return;
+        }
         if (idle) {
           // PC가 비어 있을 때만 다음 사진을 가져온다. 확인 중인 영수증을 덮어쓰지 않기 위해서다.
           const next = await nextImage(room);
           setPending(next.pending); setClosesAt(next.closesAt);
-          if (next.image) onImageRef.current(next.image);
+          if (next.image && onImageRef.current(next.image) === false) heldImage.current=next.image;
         } else {
           const st = await checkRoom(room);
           setPending(st.pending); setClosesAt(st.closesAt);
