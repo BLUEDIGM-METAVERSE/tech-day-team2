@@ -54,3 +54,11 @@ npm run build
 - [담당 2: 결과·엑셀](docs/TODO_02_RESULT_EXCEL.md)
 - [담당 3: 서버·연결](docs/TODO_03_SERVER.md)
 - [담당 4: OCR·추출](docs/TODO_04_OCR.md)
+
+## 업로드 안정화 검증
+
+파일 선택을 취소하면 기존 선택을 유지합니다. 이미지 준비 중에는 입력·제거·처리 버튼을 잠그고 진행 상태를 안내합니다. 미지원·빈 파일·손상 이미지 오류를 구분합니다.
+
+단위 테스트: `node --experimental-strip-types --test frontend/tests/image.test.mjs`
+
+검증 범위·수동 확인 잔여 항목은 [TODO01 테스트 결과](docs/TODO01_UNIT_TEST_2026-11-02.md)를 참고하세요.

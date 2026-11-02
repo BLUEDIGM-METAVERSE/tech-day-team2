@@ -14,7 +14,7 @@ export default function App() {
     const current=++version.current; setResult(null); setPreview(null); setError('');
     if (!file) return;
     try { const image=await resizeImage(file); if(current===version.current) setPreview(image); }
-    catch { if(current===version.current) setError('이미지를 읽을 수 없습니다. JPG·PNG·WebP 파일을 확인해 주세요.'); }
+    catch(e) { if(current===version.current) setError(e instanceof Error ? e.message : '이미지를 읽을 수 없습니다. 다른 이미지를 선택해 주세요.'); }
   }
   async function extract() {
     if(busy || !preview) return;
