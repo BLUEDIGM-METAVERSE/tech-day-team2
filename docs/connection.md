@@ -4,13 +4,35 @@
 
 ## 샘플 추출
 
-- `GET /api/health` → `200 {status:"ok",mode:"mock"}`.
+- `GET /api/health` → `200 {status:"ok",mode:"mock"}`. `mode`는 서버에 연결된 엔진을 따른다.
 - `POST /api/extract` → 요청 본문 없이 고정 샘플을 반환한다. 이미지를 전송하거나 OCR을 수행하지 않는다.
 - 응답: `{data:{date:string|null,merchant:string|null,amount:number|null},engine:string,warnings:string[]}`.
 - 날짜는 `YYYY-MM-DD`, 금액은 원 단위 정수다. 누락값은 `null`이며 금액을 0으로 대체하지 않는다.
-- 오류: `{error:{code,message}}`. 등록되지 않은 경로는 `404 NOT_FOUND`다.
 
-실제 OCR의 이미지 전송 방식·추가 필드·신뢰도·오류·타임아웃은 팀 합의 후 정한다.
+서버는 `backend/src/ocr/engine.mjs`의 엔진을 `{mode, extract()}` 형태로 호출한다. 실제 OCR의 이미지 전송 방식·추가 필드·신뢰도·전용 오류·타임아웃은 팀 합의 후 정한다.
+
+## 공통 오류
+
+오류 응답은 `{error:{code,message}}`이고 `message`는 화면에 그대로 표시할 수 있는 안내문이다.
+
+| 상태 | 코드 | 조건 |
+| :-- | :-- | :-- |
+| 400 | `BAD_REQUEST` | 해석할 수 없는 요청 주소 |
+| 404 | `NOT_FOUND` | 등록되지 않은 경로·메서드 |
+| 500 | `INTERNAL_ERROR` | 처리 중 예외(엔진 실패 포함). 예외 내용은 응답에 넣지 않고 로그에는 오류 종류만 남기며 서버는 계속 동작한다 |
+
+중계 전용 오류는 아래 방 API를 따른다.
+
+프런트의 공통 요청 함수는 `frontend/src/services/http.ts`의 `requestJson`이다.
+
+| 상황 | 화면 안내 |
+| :-- | :-- |
+| 오류 본문이 있는 응답 | 서버의 `message` |
+| 네트워크 실패, 오류 본문이 없는 응답 | 통신 실패·서버 실행 상태 확인·재시도 안내. API 서버가 꺼지면 Vite proxy가 본문 없는 500을 돌려주므로 이 경우에 해당한다 |
+| 시간 초과 | 응답 지연·재시도 안내. 샘플 추출의 30초는 임시 값이며 중계 요청에는 시간 제한이 없다 |
+| 성공 상태지만 JSON이 아니거나 결과 계약과 다름 | 응답 형식 오류·재시도 안내 |
+
+추출에 실패해도 선택한 이미지는 유지되며 같은 버튼으로 다시 시도한다. 폰 연결 준비에 실패하면 PC 화면의 **다시 시도**를 사용한다.
 
 ## 폰 → PC 이미지 중계
 

@@ -1,7 +1,13 @@
 import type { ReceiptResult } from '../types/receipt';
+import { BAD_RESPONSE, ApiError, requestJson } from './http';
+import { isReceiptResult } from './receiptResult';
+
+// 샘플 API용 임시 값. 실제 OCR의 타임아웃은 팀 합의 후 정한다.
+const EXTRACT_TIMEOUT_MS = 30 * 1000;
+
 // 초기 서버는 파일을 받지 않고 가짜 응답만 제공합니다.
 export async function extractSample(): Promise<ReceiptResult> {
-  const response = await fetch('/api/extract', { method: 'POST' });
-  if (!response.ok) throw new Error('결과를 불러오지 못했습니다. 서버 연결을 확인하고 다시 시도해 주세요.');
-  return response.json();
+  const body = await requestJson<unknown>('/api/extract', { method: 'POST', signal: AbortSignal.timeout(EXTRACT_TIMEOUT_MS) });
+  if (!isReceiptResult(body)) throw new ApiError(BAD_RESPONSE);
+  return body;
 }

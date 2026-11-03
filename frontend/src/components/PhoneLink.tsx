@@ -67,7 +67,7 @@ export function PhoneLink({ idle, onImage }: Props) {
     return () => window.clearInterval(timer);
   }, [room, idle]);
 
-  if (error && !room) return <section className="card phone-bar"><p className="hint">{error}</p></section>;
+  if (error && !room) return <section className="card phone-bar"><div className="info"><p className="hint" role="alert">{error}</p></div><button type="button" className="renew" onClick={() => openRoom()}>다시 시도</button></section>;
   if (!room) return <section className="card phone-bar"><p className="hint">폰 연결 준비 중…</p></section>;
   const url = phoneUrl(room);
   return <section className="card phone-bar" aria-label="폰으로 촬영해서 보내기">

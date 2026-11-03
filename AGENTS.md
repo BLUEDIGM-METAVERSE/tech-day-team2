@@ -44,7 +44,7 @@
 | :-- | :-- | :-- |
 | 업로드 | `frontend/src/components/UploadPanel.tsx`, `frontend/src/utils/image.ts` | 파일 선택·미리보기·축소·제거 |
 | 결과·엑셀 | `frontend/src/components/ResultPanel.tsx`, `ExpenseList.tsx`, `ExpenseRowFields.tsx`, `SheetHead.tsx`, `frontend/src/utils/excel.ts`, `clipboard.ts` | 결과 편집·목록·검증·복사 |
-| 서버·연결 | `backend/src/server.mjs`, `frontend/src/services/extract.ts`, `relay.ts` | API·오류 처리·실행 환경 |
+| 서버·연결 | `backend/src/server.mjs`, `app.mjs`, `frontend/src/services/extract.ts`, `relay.ts`, `http.ts`, `receiptResult.ts` | API·오류 처리·실행 환경 |
 | OCR·추출 | `backend/src/ocr/` | 실제 OCR 모듈과 필드 추출. 엔진 결정 전 독립 실험·가짜 결과 활용 |
 
 같은 표 안의 축약 파일명은 앞 파일과 같은 폴더에 있다. 폰 화면은 `PhoneLink.tsx`·`PhoneCapture.tsx`이며 업로드·서버 담당이 함께 검토한다.
@@ -83,7 +83,7 @@
 - `date`: `YYYY-MM-DD` 또는 `null`, `merchant`: 문자열 또는 `null`, `amount`: 원 단위 정수 또는 `null`.
 - 읽을 수 없는 값은 추측하지 않고 `null`로 표현한다. 누락 금액을 0으로 대체하지 않는다.
 - 사용자 편집용 선택 필드: `account`, `description`, `payment`, `project`, `section` (`dept` 또는 `project`).
-- 공통 타입은 `frontend/src/types/receipt.ts`, 서버 통신은 `frontend/src/services/extract.ts`·`relay.ts`에서 관리한다.
+- 공통 타입은 `frontend/src/types/receipt.ts`, 서버 통신은 `frontend/src/services/extract.ts`·`relay.ts`, 공통 요청·오류 처리는 `http.ts`에서 관리한다.
 - 오류 응답은 `{error:{code,message}}`다. 오류 코드·상태·제한 변경은 연결 문서에 반영한다.
 - 실제 OCR 입력·추가 필드·신뢰도·타임아웃을 변경하면 `docs/connection.md`를 함께 수정한다.
 

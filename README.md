@@ -62,7 +62,7 @@ API는 로컬 주소를 유지하고 Vite 프록시로 연결합니다. LAN 테�
 | :-- | :-- |
 | 업로드 | `frontend/src/components/UploadPanel.tsx`, `frontend/src/utils/image.ts` |
 | 결과·엑셀 | `frontend/src/components/ResultPanel.tsx`, `frontend/src/components/ExpenseList.tsx`, `frontend/src/utils/excel.ts`, `frontend/src/utils/clipboard.ts` |
-| 서버·연결 | `backend/src/server.mjs`, `frontend/src/services/extract.ts`, `frontend/src/services/relay.ts` |
+| 서버·연결 | `backend/src/server.mjs`, `backend/src/app.mjs`, `frontend/src/services/extract.ts`, `frontend/src/services/relay.ts`, `frontend/src/services/http.ts` |
 | 폰 연결 화면 | `frontend/src/components/PhoneLink.tsx`, `frontend/src/components/PhoneCapture.tsx` |
 | OCR·추출 | `backend/src/ocr/`, API 계약은 `docs/connection.md` |
 
@@ -84,4 +84,10 @@ API는 로컬 주소를 유지하고 Vite 프록시로 연결합니다. LAN 테�
 파일 선택 취소 시 기존 선택을 유지하고, 준비 중 상태를 안내합니다. PC 이미지 준비 중에는 폰 수신을 대기하며 새 이미지로 교체된 이전 요청 결과를 표시하지 않습니다. PNG 미리보기와 폰 전송용 JPEG 변환을 모두 지원합니다.
 
 테스트: `node --experimental-strip-types --test frontend/tests/image.test.mjs`
+
+## 서버·연결 안정화
+
+API 서버가 꺼져 있거나 오류를 반환하면 화면에 안내를 표시합니다. 선택한 이미지는 유지되므로 같은 버튼으로 다시 시도할 수 있습니다. 오류 코드와 안내 기준은 [연결 계약](docs/connection.md)을 참고하세요.
+
+테스트: `npm test -w backend`, `node --experimental-strip-types --test frontend/tests/http.test.mjs`
 

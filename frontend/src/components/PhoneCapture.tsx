@@ -26,7 +26,7 @@ export function PhoneCapture({ room }: { room: RoomRef }) {
       setMessage(result.pending > 1 ? `PC로 보냈습니다. PC에서 처리를 기다리는 사진이 ${result.pending}장 있습니다.` : 'PC로 보냈습니다. PC 화면을 확인하세요.');
     } catch (e) {
       if (isRoomGone(e)) setState('gone');
-      else setMessage('전송 실패: ' + (e instanceof Error ? e.message : String(e)) + ' · 같은 Wi-Fi인지 확인하고 다시 시도해 주세요.');
+      else setMessage('전송 실패: ' + (e instanceof Error ? e.message : String(e)) + ' · 같은 Wi-Fi인지도 확인해 주세요.');
     } finally { setBusy(false); }
   }
 
