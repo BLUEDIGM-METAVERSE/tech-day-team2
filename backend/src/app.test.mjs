@@ -82,6 +82,19 @@ test('키가 없거나 틀린 방 요청은 404 ROOM_NOT_FOUND', async () => {
   }
 });
 
+test('QR 연결은 활동 없이도 30분간 유지되고 발급 시각 기준으로 만료된다', async t => {
+  let now = Date.now();
+  t.mock.method(Date, 'now', () => now);
+  const room = await newRoom();
+  const deadline = now + 30 * 60 * 1000;
+  assert.equal(room.expiresAt, deadline);
+  assert.equal(room.closesAt, deadline);
+  now = deadline - 1000;
+  assert.equal((await call(roomPath(room))).status, 200);
+  now = deadline;
+  assert.equal((await call(roomPath(room))).status, 404);
+});
+
 test('사진은 보낸 순서대로 한 번만 전달되고 닫힌 방은 쓸 수 없다', async () => {
   const room = await newRoom();
   assert.equal((await call(roomPath(room))).body.pending, 0);
@@ -139,4 +152,63 @@ test('엔진 예외는 500으로 바꾸고 예외 내용을 응답·로그에 �
     assert.ok(!JSON.stringify(logged.mock.calls[0].arguments).includes(secret));
     assert.equal((await fetch(`http://127.0.0.1:${brokenPort}/api/health`)).status, 200);
   } finally { broken.closeAllConnections(); broken.close(); }
+});
+
+test('Gemini 이미지 계약을 확인하고 유효한 본문만 엔진에 전달한다', async t => {
+  const { readFile } = await import('node:fs/promises');
+  const { OcrError } = await import('./ocr/gemini.mjs');
+  const image = await readFile(new URL('./ocr/samples/receipt-01.jpg', import.meta.url));
+  let calls = 0;
+  const engine = {
+    mode: 'gemini',
+    async extract({ bytes, mimeType, signal }) {
+      assert.deepEqual(bytes, image);
+      assert.equal(mimeType, 'image/jpeg');
+      assert.equal(signal.aborted, false);
+      if (++calls === 3) throw new OcrError(429, 'OCR_QUOTA', '할당량을 확인해 주세요.');
+      return { data: { date: null, merchant: null, amount: null }, engine: 'gemini', warnings: [] };
+    },
+  };
+  const app = createApp({ engine });
+  const port = await listen(app);
+  t.after(() => { app.closeAllConnections(); app.close(); });
+  const post = (body, mimeType = 'image/jpeg') => fetch(`http://127.0.0.1:${port}/api/extract`, {
+    method: 'POST', body, headers: { 'Content-Type': mimeType },
+  });
+  for (const [body, type, status, code] of [
+    [image, 'text/plain', 415, 'BAD_IMAGE'],
+    [image, 'image/png', 400, 'BAD_IMAGE'],
+    [Buffer.alloc(0), 'image/jpeg', 400, 'BAD_IMAGE'],
+    [Buffer.alloc(8 * 1024 * 1024 + 1), 'image/jpeg', 413, 'BAD_IMAGE'],
+  ]) {
+    const response = await post(body, type);
+    assert.equal(response.status, status);
+    assert.equal((await response.json()).error.code, code);
+  }
+  assert.equal(calls, 0);
+  const ok = await post(image);
+  assert.equal(ok.status, 200);
+  assert.equal((await ok.json()).engine, 'gemini');
+  const api = (path, init) => fetch(`http://127.0.0.1:${port}${path}`, init);
+  const room = await (await api('/api/rooms', { method: 'POST' })).json();
+  try {
+    const sent = await api(roomPath(room, '/images'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: `data:image/jpeg;base64,${image.toString('base64')}`,
+    });
+    assert.equal(sent.status, 202);
+    const next = await api(roomPath(room, '/next'));
+    assert.equal(next.status, 200);
+    const { image: relayedImage } = await next.json();
+    const phonePhoto = Buffer.from(relayedImage.split(',')[1], 'base64');
+    const extracted = await post(phonePhoto);
+    assert.equal(extracted.status, 200);
+    assert.equal((await extracted.json()).engine, 'gemini');
+  } finally {
+    await api(roomPath(room), { method: 'DELETE' });
+  }
+  const quota = await post(image);
+  assert.equal(quota.status, 429);
+  assert.equal((await quota.json()).error.code, 'OCR_QUOTA');
 });

@@ -120,10 +120,21 @@ test('라벨이 없으면 가장 큰 숫자를 고르지 않는다', () => {
 });
 
 test('0 이하와 소수는 후보에서 제외하고 0으로 대체하지 않는다', () => {
-  for (const text of ['합계 0', '합계 0원', '합계 -5,000', '합계 - 5,000', '합계 ₩-5,000', '합계 12.5', '합계 12,000.50', '합계 12.000']) {
+  for (const text of ['합계 0', '합계 0원', '합계 -5,000', '합계 - 5,000', '합계 ₩-5,000', '합계 12.5', '합계 12,000.50']) {
     assert.equal(amountOf(text), null, text);
   }
   assert.equal(amountOf('결제금액 0\n합계 5,000'), 5000);
+});
+
+test('금액의 점 천 단위 구분자와 공백을 제거한다', () => {
+  for (const text of ['합 계 : 42. 700  ', '합계 ₩42.700원', '합계 1. 234 . 567']) {
+    assert.equal(amountOf(text), text.includes('567') ? 1234567 : 42700);
+  }
+  assert.equal(amountOf('합 계 : 42. 700\n받을금액 : 42. 700\n받은금액 : 42. 700'), 42700);
+  assertNoAmount('합계 42. 70');
+  assertNoAmount('합계 -42. 700');
+  assertNoAmount('합계 42. 700 USD');
+  assertNoAmount('합계 42. 700\n합계 43. 700');
 });
 
 test('금액 라벨 뒤의 번호·시각·비율·깨진 숫자를 금액으로 읽지 않는다', () => {
@@ -146,8 +157,11 @@ test('거래처 라벨과 구분자를 인식한다', () => {
   assert.equal(merchantOf('상호: 테스트상점 대표 김가짜 TEL 010-0000-0000'), '테스트상점');
 });
 
-test('거래처 라벨이 없으면 첫 줄을 추측하지 않는다', () => {
-  assert.equal(merchantOf('테스트상점\n2026-10-29\n합계 1,000'), null);
+test('거래일과 금액이 확인되고 상단에 이름 후보가 하나면 상호 라벨 없이 읽는다', () => {
+  assert.equal(merchantOf('테스트상점\n2026-10-29\n합계 1,000'), '테스트상점');
+  assert.equal(merchantOf('신용카드 매출전표\n서울이비인후과\n거래일시 2026-10-29\n합계 1,000'), '서울이비인후과');
+  assert.equal(merchantOf('매출전표\n테스트상점\n다른이름\n2026-10-29\n합계 1,000'), null);
+  assert.equal(merchantOf('매출전표\n2026-10-29\n합계 1,000'), null);
   assert.ok(hasWarning('테스트상점\n합계 1,000', '거래처'));
 });
 
@@ -186,7 +200,7 @@ const assertNoMerchant = text => {
 };
 
 test('지적 1: 천 단위 구분자가 깨진 금액은 앞 조각으로 읽지 않는다', () => {
-  for (const text of ['합계 11, 000', '합계 11 ,000', '합계 12. 000', '합계 12 , 000', '합계 12,OOO', '합계 1,OOO', "합계 12'000",
+  for (const text of ['합계 11, 000', '합계 11 ,000', '합계 12 , 000', '합계 12,OOO', '합계 1,OOO', "합계 12'000",
     '합계 12;000', '합계 12`000', '합계 12·000', '합계 12_000', '결제금액 5,​000']) {
     assertNoAmount(text);
     assertNoAmount(receipt(text));
@@ -378,9 +392,18 @@ test('OCR이 합계를 함계로 읽어도 합계로 처리한다', () => {
   assert.equal(amountOf('함계 6,200'), 6200);
   assert.equal(amountOf('함계 6,200\n합계 6,200'), 6200);
   assert.equal(amountOf('함계 6,200\n결제금액 5,000'), 5000);
-  for (const text of ['함계 6,200\n합계 7,000', '소함계 6,200', '함계 5.000', '함계 6,200\n할인 1,000']) {
+  for (const text of ['함계 6,200\n합계 7,000', '소함계 6,200', '함계 6,200\n할인 1,000']) {
     assertNoAmount(text);
   }
+});
+
+test('OCR의 합게 표기를 합계로 처리하고 충돌이나 소계는 제외한다', () => {
+  for (const text of ['합게 6,200', '합게 금액: 6,200원', '합게액 6,200']) {
+    assert.equal(amountOf(text), 6200);
+  }
+  assert.equal(amountOf('합게 6,200\n결제금액 5,000'), 5000);
+  assertNoAmount('합게 6,200\n합계 7,000');
+  assertNoAmount('소합게 6,200');
 });
 
 test('공백이 아주 길거나 날짜가 반복되는 입력에서도 오래 걸리지 않는다', () => {
@@ -396,4 +419,17 @@ test('경고에 원문을 넣지 않고 로그를 출력하지 않는다', t => 
   for (const spy of spies) assert.equal(spy.mock.callCount(), 0);
   assert.equal(warnings.length, 3);
   for (const warning of warnings) assert.doesNotMatch(warning, /비밀|1,234|5,678|2026/);
+});
+
+test('민감정보 8종을 결과 후보에서 제외하고 같은 줄의 정상 필드는 유지한다', () => {
+  for (const label of ['카드사', '카드번호', '승인번호', '가맹점번호', '매입사명', '거래처 주소', '거래처 사업자번호', '거래처 전화번호']) {
+    const text = `상호: 테스트상점 ${label}: 2026-01-01 거래일자: 2026-11-10 결제금액: 12,300원`;
+    const result = parseReceiptText(text);
+    assert.deepEqual(result, { data: { date: '2026-11-10', merchant: '테스트상점', amount: 12300 }, warnings: [] }, label);
+  }
+});
+
+test('별도 줄의 민감정보가 카드 앱의 거래처나 날짜가 되지 않는다', () => {
+  const result = parseReceiptText('이용내역 상세\n카 드 사 :\n테스트카드\n거래처 주소:\n2026-01-01\n승인일자: 2026-11-10\n결제금액: 12,300원');
+  assert.deepEqual(result.data, { date: '2026-11-10', merchant: null, amount: 12300 });
 });

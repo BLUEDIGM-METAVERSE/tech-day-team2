@@ -1,11 +1,12 @@
-import { useRef, useState } from 'react';
+import { withExpenseDefaults } from './constants/accounts';
+import { useEffect, useRef, useState } from 'react';
 import type { ExpenseRow, ReceiptData, ReceiptResult } from './types/receipt';
 import { UploadPanel } from './components/UploadPanel';
 import { ResultPanel } from './components/ResultPanel';
 import { ExpenseList } from './components/ExpenseList';
 import { PhoneLink } from './components/PhoneLink';
 import { PhoneCapture } from './components/PhoneCapture';
-import { extractSample } from './services/extract';
+import { extractReceipt, getOcrMode, type OcrMode } from './services/extract';
 import { resizeImage } from './utils/image';
 import { sectionOf } from './utils/excel';
 
@@ -42,6 +43,18 @@ export default function App() {
 }
 
 function Workspace() {
+  const [mode, setMode] = useState<OcrMode | null>(null);
+  const [modeError, setModeError] = useState('');
+  const [modeAttempt, setModeAttempt] = useState(0);
+  useEffect(() => {
+    const controller = new AbortController();
+    const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(5_000)]);
+    getOcrMode(signal).then(
+      value => { if (!controller.signal.aborted) setMode(value); },
+      error => { if (!controller.signal.aborted) setModeError(error.message); },
+    );
+    return () => controller.abort();
+  }, [modeAttempt]);
   const [preview,setPreview]=useState<string|null>(null);
   const [draft,setDraft]=useState<ReceiptResult|null>(null);
   const [rows,setRows]=useState<ExpenseRow[]>([]);
@@ -64,12 +77,20 @@ function Workspace() {
   }
   // 폰에서 넘어온 이미지는 이미 1600px로 줄어 있어 그대로 미리보기에 넣는다.
   function receiveImage(dataUrl: string) { if(preparingRef.current || requestRef.current || previewRef.current) return false; previewRef.current=dataUrl; version.current++; setDraft(null); setError(''); setPreview(dataUrl); return true; }
-  async function extract() {
-    if(requestRef.current || preparingRef.current || !preview) return;
+  async function extract(image?: string) {
+    if(requestRef.current || preparingRef.current || !preview || !mode || (mode === 'gemini' && !image)) return;
     requestRef.current=true;
     const current=version.current;
     setBusy(true); setError(''); setDraft(null);
-    try { const result=await extractSample(); if(current===version.current) setDraft(result); } catch(e) {setError(e instanceof Error ? e.message : '처리에 실패했습니다.');} finally {requestRef.current=false; setBusy(false);}
+    try {
+      const result = await extractReceipt(mode === 'gemini' ? image : undefined);
+      if (current === version.current) setDraft({ ...result, data: withExpenseDefaults(result.data) });
+    } catch (error) {
+      if (current === version.current) setError(error instanceof Error ? error.message : '처리에 실패했습니다.');
+    } finally {
+      requestRef.current = false;
+      setBusy(false);
+    }
   }
   // 확인한 행을 일자순 자리에 넣고 다음 영수증을 받을 수 있게 비운다. 이미지는 메모리에서만 쓰고 보관하지 않는다.
   function addRow() {
@@ -83,13 +104,14 @@ function Workspace() {
   function moveRow(id: string, dir: -1 | 1) { setRows(list=>moveWithinSection(list,id,dir)); }
   const draftSection=draft ? sectionOf(draft.data) : 'dept';
   const nextNo=rows.filter(r=>sectionOf(r.data)===draftSection).length+1;
-  return <><header><div className="brand">지출결의서 자동화 <span>테크데이 2팀</span></div><span className="badge">OCR 시제품 · 샘플 모드</span></header>
+  return <><header><div className="brand">지출결의서 자동화 <span>테크데이 2팀</span></div><span className="badge">{mode === 'gemini' ? 'OCR · Gemini 모드' : mode === 'mock' ? 'OCR 시제품 · 샘플 모드' : 'OCR 모드 연결 대기'}</span></header>
     <main><div className="intro"><p>RECEIPT WORKSPACE</p><h1>영수증에서 필요한 정보만 간편하게</h1><p>영수증을 한 장씩 확인해 목록에 쌓은 뒤 한 번에 복사하세요. 새로고침하면 작업 내용이 사라집니다.</p></div>
       <nav aria-label="작업 순서"><span>01 영수증 선택</span><span>02 OCR 추출</span><span>03 확인 후 목록에 추가</span><span>04 한 번에 복사</span></nav>
       {error && <p className="error" role="alert">{error}</p>}
+      {modeError && <p className="error" role="alert">{modeError} <button onClick={() => { setModeError(''); setModeAttempt(attempt => attempt + 1); }}>다시 연결</button></p>}
       <PhoneLink idle={!preview && !busy && !preparing} onImage={receiveImage}/>
       <div className="grid">
-        <UploadPanel preview={preview} busy={busy} preparing={preparing} onSelect={select} onExtract={extract}/>
+        <UploadPanel preview={preview} busy={busy} preparing={preparing} mode={mode} onSelect={select} onExtract={extract} onMaskEdit={() => { setDraft(null); setError(''); }}/>
         <ResultPanel draft={draft} nextNo={nextNo} onChange={setDraft} onAdd={addRow} onDiscard={()=>setDraft(null)}/>
       </div>
       <ExpenseList rows={rows} onChange={changeRow} onRemove={removeRow} onMove={moveRow}/>

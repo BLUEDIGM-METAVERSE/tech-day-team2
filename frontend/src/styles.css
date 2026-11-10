@@ -59,3 +59,28 @@ button:not(:disabled):active{transform:translateY(1px);background:#e4e8ef;box-sh
 @media(min-width:1451px){.grid{min-height:600px}}
 /* 폰 화면 보조 버튼: 갤러리·파일에서 선택 */
 .phone-page .shoot.pick{padding:16px;margin-top:0;border-style:solid;border-color:#c5cbd6;color:#1c2230;font-size:15px;font-weight:600}
+
+.receipt-mask-dialog {
+  width: min(1040px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  margin: auto;
+  padding: 18px;
+  border: 1px solid #e2e5ea;
+  border-radius: 12px;
+  color: inherit;
+}
+.receipt-mask-dialog::backdrop { background: rgb(22 29 42 / 60%); }
+.receipt-mask-heading, .receipt-mask-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.receipt-mask-heading { justify-content: space-between; }
+.receipt-mask-heading h2 { margin: 0; }
+.receipt-mask-scroll {
+  max-height: min(62dvh, max(140px, calc(100dvh - 300px)));
+  margin: 12px 0;
+  overflow: auto;
+  border: 1px solid #e2e5ea;
+  background: #f4f5f8;
+}
+.receipt-mask-canvas { display: block; height: auto; touch-action: none; cursor: crosshair; }
+
+.receipt-mask-thumbnail { display: block; max-width: 100%; margin: 16px auto 0; padding: 0; border: 0; }
+.receipt-mask-thumbnail .preview { width: auto; height: auto; margin: 0; }

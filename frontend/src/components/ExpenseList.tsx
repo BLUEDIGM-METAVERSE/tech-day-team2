@@ -28,8 +28,10 @@ export function ExpenseList({ rows, onChange, onRemove, onMove }: Props) {
   }
   useEffect(() => () => window.clearTimeout(timer.current), []);
   function reset() { setManual(null); }
-  async function copy(section: Section, label: string, count: number, template: boolean) {
-    const data = rows.filter(r => sectionOf(r.data) === section).map(r => r.data);
+  async function copy(list: ExpenseRow[], label: string, template: boolean) {
+    // 화면의 표 전체가 아니라 목록에 추가된 상세 행만 클립보드에 넣는다.
+    const data = list.map(row => row.data);
+    const count = data.length;
     const text = rowsTsv(data, template);
     try {
       // 텍스트와 함께 병합 폭·서식을 가진 HTML 표를 넣어 시트의 병합 셀과 서식이 유지되게 한다.
@@ -37,7 +39,7 @@ export function ExpenseList({ rows, onChange, onRemove, onMove }: Props) {
       toast(template ? label + ' ' + count + '행을 복사했습니다. 양식의 첫 빈 행 B열에 Ctrl+V로 붙여넣으세요.' : label + ' ' + count + '행을 복사했습니다. 빈 엑셀 셀에 붙여넣으세요.');
     } catch { setManual(text); toast('자동 복사가 지원되지 않습니다. 아래 내용을 선택해 복사하세요.', true); }
   }
-  return <section className="card list-card"><h2>지출결의서 목록</h2><p className="hint">추가한 영수증을 경비 구분별로 모아 한 번에 복사합니다. 추가 시 일자가 빠른 순으로 들어가며 ▲▼로 순서를 바꿀 수 있습니다. 새로고침하면 사라집니다.</p>
+  return <section className="card list-card"><h2>지출결의서 목록</h2><p className="hint">복사에는 경비 구분별로 추가한 영수증 행만 포함됩니다. 추가 시 일자가 빠른 순으로 들어가며 ▲▼로 순서를 바꿀 수 있습니다. 새로고침하면 사라집니다.</p>
     {rows.length === 0 ? <div className="empty">아직 추가한 영수증이 없습니다. 위에서 확인한 결과를 목록에 추가하세요.</div> : SECTIONS.map(s => {
       const list = rows.filter(r => sectionOf(r.data) === s.key);
       if (list.length === 0) return null;
@@ -60,9 +62,9 @@ export function ExpenseList({ rows, onChange, onRemove, onMove }: Props) {
         </tbody><tfoot><tr><th colSpan={6}>{s.label} 합계</th><td>{total.toLocaleString('ko-KR')}원</td><td colSpan={2}/></tr></tfoot></table></div>
         {!allValid && <p role="alert">빨간 행의 일자·거래처·금액을 확인해 주세요. 금액은 0보다 큰 원 단위 정수여야 합니다.</p>}
         <div className="copy-actions">
-          <button disabled={!allValid} onClick={() => copy(s.key, s.label, list.length, false)}>엑셀용 복사 (6열)</button>
-          <button disabled={!allValid} onClick={() => copy(s.key, s.label, list.length, true)}>원본 양식용 복사 (B~X)</button>
-          <span className="hint">양식 {s.first}~{s.last}행 중 첫 빈 행의 B열을 한 번 클릭하고 Ctrl+V로 붙여넣으면 {list.length}행이 아래로 이어서 들어갑니다. "값만 붙여넣기"(Ctrl+Shift+V)는 병합이 풀리므로 쓰지 마세요.</span>
+          {/* <button disabled={!allValid} onClick={() => copy(list, s.label, false)}>엑셀용 복사 (6열)</button> */}
+          <button disabled={!allValid} onClick={() => copy(list, s.label, true)}>{s.key === 'dept' ? '부서경비 내역 복사' : '프로젝트 경비 내역 복사'}</button>
+          <span className="hint">'복사'를 눌러서 '지출결의서 B열'에 붙여넣어주세요.</span>
         </div>
       </div>;
     })}

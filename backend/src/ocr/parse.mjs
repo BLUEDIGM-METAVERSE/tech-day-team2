@@ -1,6 +1,6 @@
 // ---- 영수증 OCR 원문 → 필드 추출 ----
 // 원칙: 추측하지 않는다. 확신할 수 없거나 후보가 충돌하면 null과 경고를 돌려준다. 누락 금액을 0으로 대체하지 않는다.
-// 경고에는 추출 원문을 넣지 않고, 이 모듈은 어떤 로그도 출력하지 않는다.
+// 경고에는 추출 원문을 넣지 않으며 파서는 직접 로그를 출력하지 않는다.
 
 // OCR이 글자 사이를 띄워도 인식하도록 라벨을 정규식으로 바꾼다('합계' → '합\s*계').
 const spaced = word => [...word].join('\\s*');
@@ -86,7 +86,7 @@ function findDate(lines, warnings) {
 // 라벨 우선순위: 앞 단계가 확정되면 뒤 단계는 보지 않는다. 앞 단계 라벨을 읽지 못했으면 뒤 단계로 내려가지 않는다.
 const AMOUNT_TIERS = [
   ['결제금액', '결제액', '승인금액', '승인액', '이용금액', '받을금액', '청구금액', '청구액', '최종금액'],
-  ['합계금액', '합계액', '합계', '함계', '총액', '총금액'], // '함계': Tesseract가 '합계'를 자주 이렇게 읽는다.
+  ['합계금액', '합계액', '합계', '합게금액', '합게액', '합게', '함계', '총액', '총금액'], // 합게·함계는 합계의 OCR 오인식 표기.
 ];
 const FINAL_TIER = 0;
 const TOTAL_TIER = 1;
@@ -98,7 +98,7 @@ const CARD_QUALIFIERS = new Set(['카드', '신용카드', '체크카드', '법�
 const OTHER_PAYMENT_RE = /^\s*(?:현금|상품권|계좌이체|이체)(?:\s*결제)?[\s:]*[₩\\]?\s*[1-9]/;
 // 이 낱말이 있는 줄은 금액 후보에서 통째로 뺀다. 공백을 없앤 대문자 줄과 비교한다.
 const NOT_TOTAL_WORDS = ['부가세', '부가가치세', '세액', '세금', '과세', '면세', '영세', '공급', '봉사료', '받은돈', '받은금액', '거스름', '잔돈',
-  '할인', '포인트', '단가', '수량', '건수', '소합계', '잔액', '적립', '쿠폰', '미결제', 'VAT', 'TAX'];
+  '할인', '포인트', '단가', '수량', '건수', '소합계', '소합게', '잔액', '적립', '쿠폰', '미결제', 'VAT', 'TAX'];
 // 합계 뒤에 나오면 최종 금액이 합계와 달라질 수 있는 낱말.
 const ADJUST_WORDS = ['할인', '봉사료', '쿠폰', '포인트사용', '사용포인트'];
 // 취소·환불 전표 표시. '환불은 영수증 지참' 같은 안내문까지 막지 않도록 낱말 조합만 본다.
@@ -106,8 +106,11 @@ const CANCEL_RE = /(?:승인|결제|거래|카드)취소|취소(?:승인|거래|
 const CANCEL_WORD_RE = /취소|환불|반품/;
 // 숫자 앞뒤 문맥으로 전화번호·시각·비율·수량 조각을 걸러낸다.
 const NUMBER_RE = /(?<![\dA-Za-z가-힣.,])(?<!\d[-−–—―/:])[₩\\]?\s*(\d+(?:,\d+)*(?:\.\d+)?)(?![\d%]|\s*%|[-/:.,]?\d|(?!원)[A-Za-z가-힣])/g;
+const UNREADABLE_TEXT = '[판독 불가]';
 const VALID_AMOUNT = /^(?:[1-9]\d*|[1-9]\d{0,2}(?:,\d{3})+)$/;
-// 천 단위 구분자가 깨진 숫자: '11, 000', '12 ,000', '12. 000', '12,OOO', "12'000", '12_000', '12 000'.
+// 값 전체가 원화 천 단위 묶음일 때만 점을 없앤다.
+const DOTTED_WON_AMOUNT_RE = /^(?:[₩\\]\s*)?([1-9]\d{0,2}(?:\s*\.\s*\d{3})+)(?:\s*원)?$/;
+// 천 단위 구분자가 깨진 숫자: '11, 000', '12 ,000', '12,OOO', "12'000", '12_000', '12 000'.
 const BROKEN_NUMBER_RE = /\d\s*[;'`’·_]\s*[\dOoIl]|\d\s*[,.]\s*[OoIl]|\d(?:\s+[,.]\s*|[,.]\s+)\d|\d\s+\d{3}(?![\d,])/;
 // 음수 표기: 앞뒤 마이너스, 삼각형, 괄호.
 const NEGATIVE_RE = /[△▲▽▼]|(?<!\d\s*)[-−–—―]\s*[₩\\]?\s*\d|\d\s*[-−–—―](?!\s*\d)|\(\s*[₩\\]?\s*\d[\d,]*\s*원?\s*\)/;
@@ -116,8 +119,10 @@ const FOREIGN_RE = /[$¥€£]|(?<![A-Za-z])(?:USD|JPY|EUR|CNY|GBP)(?![A-Za-z])|
 
 // 라벨 뒤 구간을 읽는다. values: 0보다 큰 정수, zero: 0 표기 있음, unreadable: 금액을 믿을 수 없는 표기가 있음.
 function readAmounts(segment) {
-  const text = segment.replace(/[​-‍﻿]/g, ' ').replace(/[-−–—―.=_~·─━]{2,}/g, ' ').replace(/^[\s:=]+/, '');
-  if (BROKEN_NUMBER_RE.test(text) || NEGATIVE_RE.test(text) || FOREIGN_RE.test(text)) return { values: [], zero: false, unreadable: true };
+  const cleaned = segment.replace(/[​-‍﻿]/g, ' ').replace(/[-−–—―.=_~·─━]{2,}/g, ' ').replace(/^[\s:=]+/, '').trim();
+  const dottedAmount = DOTTED_WON_AMOUNT_RE.exec(cleaned);
+  const text = dottedAmount ? dottedAmount[1].replace(/[.\s]/g, '') : cleaned;
+  if (text.includes(UNREADABLE_TEXT) || BROKEN_NUMBER_RE.test(text) || NEGATIVE_RE.test(text) || FOREIGN_RE.test(text)) return { values: [], zero: false, unreadable: true };
   const result = { values: [], zero: false, unreadable: false };
   for (const [, digits] of text.matchAll(NUMBER_RE)) {
     const value = Number(digits.replaceAll(',', ''));
@@ -207,7 +212,8 @@ const OWNER_LABELS = ['대표자', '대표', '주소'];
 // 줄 맨 앞이면 ':'나 공백 뒤, 줄 중간이면 ':' 뒤의 값만 쓴다. '본 영수증 가맹점 보관용' 같은 문장을 값으로 읽지 않기 위해서다.
 const MERCHANT_RE = new RegExp(`^\\s*(?:${LABEL})(?:\\s*:\\s*|\\s+)|(?<=\\s)(?:${LABEL})\\s*:\\s*`, 'g');
 // 같은 줄에 이어지는 다른 항목에서 값을 끊는다. 라벨, 전화 표시, 날짜·번호·금액 모양을 경계로 본다.
-const NEXT_FIELD_LABELS = alt([...MERCHANT_LABELS, ...ID_LABELS, ...OWNER_LABELS, ...AMOUNT_TIERS.flat(), '거래일시', '거래일', '일시', '일자', '날짜']);
+const RESULT_DATE_FIELDS = ['거래일시', '거래일자', '거래일', '결제일시', '결제일자', '결제일', '승인일시', '승인일자', '승인일', '일시', '일자', '날짜'];
+const NEXT_FIELD_LABELS = alt([...MERCHANT_LABELS, ...ID_LABELS, ...OWNER_LABELS, ...AMOUNT_TIERS.flat(), ...RESULT_DATE_FIELDS]);
 const NEXT_FIELD_RE = new RegExp(`(?:\\s+|\\s*[(/|,]\\s*)(?:${NEXT_FIELD_LABELS})(?![가-힣])`
   + '|\\s*[☎☏]|\\s+T\\s*[:.]'
   + '|\\s+(?:\\d{2,4}[-./]\\d{1,2}[-./]\\d{1,2}|\\d{2,4}\\s*\\.\\s*\\d{1,2}\\s*\\.\\s*\\d{1,2}|\\d{2,4}-\\d{2,4}-\\d{2,5}|\\d{1,3}(?:,\\d{3})+|\\d{2,4}\\s*년)(?!\\d)', 'i');
@@ -224,7 +230,7 @@ const APP_NOT_NAME_RE = /^(?:[\d,.원₩\\]+$|결제정보|가맹점정보|이�
 function merchantValue(rest) {
   const cut = rest.search(NEXT_FIELD_RE);
   const value = (cut < 0 ? rest : rest.slice(0, cut)).replace(/\s+/g, ' ').replace(/[\s:,|/]+$/, '').trim();
-  if (!/[A-Za-z가-힣]/.test(value) || NOT_NAME_RE.test(value) || SENTENCE_END_RE.test(value)) return undefined;
+  if (value.includes(UNREADABLE_TEXT) || !/[A-Za-z가-힣]/.test(value) || NOT_NAME_RE.test(value) || SENTENCE_END_RE.test(value)) return undefined;
   return value;
 }
 
@@ -236,7 +242,24 @@ function appTitleMerchant(lines) {
   return merchantValue(next);
 }
 
-function findMerchant(lines, warnings) {
+const RECEIPT_HEADING = /^(?:카드|신용카드|체크카드|현금|현금영수증|매출|신용카드매출|카드매출|거래|결제)?(?:영수증|전표|명세서|확인서)(?:고객용|보관용)?$/;
+const HEADER_METADATA = /^(?:카드결제|결제정보|판매정보|거래정보|가맹점정보|고객용|고객보관용|가맹점용|가맹점보관용|재발행|품명|품목|상품명|공급가액|부가세|일시불)/;
+
+function receiptHeaderMerchant(lines) {
+  const boundary = lines.findIndex(line => DATE_PATTERNS.some(pattern => line.search(pattern) >= 0) || line.search(AMOUNT_RE) >= 0);
+  if (boundary < 1) return undefined;
+  const candidates = new Map();
+  for (const line of lines.slice(0, boundary).filter(line => line.trim()).slice(0, 5)) {
+    const key = line.replace(/[^0-9A-Za-z가-힣]/g, '');
+    if (key === APP_TITLE) return undefined;
+    if (RECEIPT_HEADING.test(key) || HEADER_METADATA.test(key) || HEADER_FIELD_RE.test(line)) continue;
+    const name = merchantValue(line);
+    if (name && !name.includes(':') && name.length <= 60) candidates.set(compact(name), name);
+  }
+  return candidates.size === 1 ? candidates.values().next().value : undefined;
+}
+
+function findMerchant(lines, warnings, hasTransaction) {
   const found = new Map(); // 공백을 없앤 값 -> 원래 표기
   for (const line of lines) {
     for (const match of line.matchAll(MERCHANT_RE)) {
@@ -248,21 +271,70 @@ function findMerchant(lines, warnings) {
   // 라벨이 붙은 값이 없을 때만 앱 캡처 구조를 본다.
   const fromTitle = found.size ? undefined : appTitleMerchant(lines);
   if (fromTitle) return fromTitle;
-  warnings.push(found.size ? '서로 다른 거래처가 여러 개 있어 거래처를 확정하지 못했습니다.' : '상호·가맹점 라벨이 붙은 거래처를 찾지 못했습니다.');
+  const fromHeader = found.size === 0 && hasTransaction ? receiptHeaderMerchant(lines) : undefined;
+  if (fromHeader) return fromHeader;
+  warnings.push(found.size ? '서로 다른 거래처가 여러 개 있어 거래처를 확정하지 못했습니다.' : '영수증에서 거래처를 확정하지 못했습니다.');
   return null;
 }
 
-// OCR 원문에서 날짜·거래처·금액을 뽑는다. 어떤 입력에도 예외를 던지지 않는다.
-export function parseReceiptText(text) {
+// OCR 응답에 남아 있는 민감 필드는 날짜·거래처·금액 후보를 찾기 전에 제외한다.
+const PRIVATE_FIELDS = [
+  '카드사', '카드사명', '발급사', '발급사명', '발급카드사', '이용카드', '카드번호', '카드NO',
+  '승인번호', '승인NO', '가맹점번호', '가맹점NO', '매입사', '매입사명', '매입카드사',
+  '주소', '거래처주소', '가맹점주소', '매장주소', '사업장주소', '소재지',
+  '사업자등록번호', '사업자번호', '거래처사업자번호', '가맹점사업자번호',
+  '전화', '전화번호', '거래처전화번호', '가맹점전화번호', '연락처', 'TEL', 'FAX', '팩스', '휴대폰',
+];
+const RESULT_FIELDS = [...MERCHANT_LABELS, ...AMOUNT_TIERS.flat(), ...RESULT_DATE_FIELDS];
+const HEADER_FIELD_RE = new RegExp(`^(?:${alt(RESULT_FIELDS)})(?![가-힣A-Za-z])`, 'i');
+const fieldPattern = labels => `(?<![A-Za-z0-9가-힣])(?:${alt(labels)})(?=\\s|[:#.=]|$)`;
+const PRIVATE_FIELD_RE = new RegExp(fieldPattern(PRIVATE_FIELDS), 'gi');
+const KNOWN_FIELD_RE = new RegExp(fieldPattern([...PRIVATE_FIELDS, ...RESULT_FIELDS]), 'i');
+const PRIVATE_NUMBER_RE = /(?<![\d-])(?:\d{3}-\d{2}-\d{5}|(?:\(?0\d{1,2}\)?[ -])\d{3,4}[ -]\d{4}|[\d*xX]{4}(?:[ -][\d*xX]{4}){3})(?![\d-])/g;
+const NUMBER_THEN_DATE_RE = /^\s*[:#.=]?\s*(?:\(?0\d{1,2}\)?[ -])\d{3,4}[ -]\d{4}(?=\s+\d{2,4}[-./]\d{1,2}[-./]\d{1,2}(?![\d-]))/;
+const OMITTED_LINE = '—';
+
+function omitPrivateFields(lines) {
+  let omitNextValue = false;
+  return lines.map(line => {
+    if (!line.trim()) return line;
+    if (omitNextValue) {
+      omitNextValue = false;
+      if (!KNOWN_FIELD_RE.test(line)) return OMITTED_LINE;
+    }
+    let visible = '';
+    let cursor = 0;
+    for (const match of line.matchAll(PRIVATE_FIELD_RE)) {
+      if (match.index < cursor) continue;
+      visible += line.slice(cursor, match.index);
+      const afterLabel = match.index + match[0].length;
+      const tail = line.slice(afterLabel);
+      const numberBeforeDate = tail.match(NUMBER_THEN_DATE_RE);
+      const next = numberBeforeDate ? numberBeforeDate[0].length : tail.search(KNOWN_FIELD_RE);
+      cursor = next < 0 ? line.length : afterLabel + next;
+      if (next < 0 && !tail.replace(/^[\s:#.=]+/, '')) omitNextValue = true;
+    }
+    const filtered = (visible + line.slice(cursor)).replace(PRIVATE_NUMBER_RE, ' ').trim();
+    // 빈 줄로 바꾸면 카드 앱의 제목 다음 줄 규칙이 다른 항목을 상호로 선택할 수 있다.
+    return filtered || OMITTED_LINE;
+  });
+}
+
+// OCR 원문에서 날짜·거래처·금액을 뽑는다. 콜백에는 민감 항목을 걸러낸 텍스트만 넘긴다.
+export function parseReceiptText(text, { onFilteredText } = {}) {
   if (typeof text !== 'string' || !text.trim()) {
+    onFilteredText?.('');
     return { data: { date: null, merchant: null, amount: null }, warnings: ['영수증 텍스트가 비어 있거나 문자열이 아닙니다.'] };
   }
   // NFKC: 전각 ':'·'，'·'￦'을 반각으로, 분해된 한글을 완성형으로 맞춘다.
   // 연속 공백은 하나로 줄인다. 값 해석에 영향이 없고, 공백이 아주 긴 입력에서 정규식이 느려지는 것을 막는다.
-  const lines = text.normalize('NFKC').replace(/[^\S\r\n]+/g, ' ').split(/\r\n|\r|\n/);
+  const lines = omitPrivateFields(text.normalize('NFKC').replace(/[^\S\r\n]+/g, ' ').split(/\r\n|\r|\n/));
+  onFilteredText?.(lines.join('\n'));
   const warnings = [];
   const date = findDate(lines, warnings);
-  const merchant = findMerchant(lines, warnings);
-  const amount = findAmount(lines, warnings);
+  const amountWarnings = [];
+  const amount = findAmount(lines, amountWarnings);
+  const merchant = findMerchant(lines, warnings, date !== null && amount !== null);
+  warnings.push(...amountWarnings);
   return { data: { date, merchant, amount }, warnings };
 }

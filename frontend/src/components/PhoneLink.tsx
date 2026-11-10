@@ -21,11 +21,11 @@ function remainingText(expiresAt: number, now: number): string {
 }
 
 // PC 쪽: 방을 만들어 QR을 보여주고, 폰이 올린 이미지를 가져와 업로드 흐름에 넣는다.
-// 방은 만든 지 30분 또는 활동 없이 10분이면 서버에서 닫히고, 그러면 새 코드를 자동 발급한다.
+// 방은 생성 30분 후 닫히고, PC에서 만료를 확인하면 새 코드를 발급한다.
 export function PhoneLink({ idle, onImage }: Props) {
   const [room, setRoom] = useState<RoomInfo | null>(null);
   const [pending, setPending] = useState(0);
-  const [closesAt, setClosesAt] = useState(0); // 절대 종료 시각. PC가 폴링하는 동안 유휴 만료는 계속 밀리므로 표시에 쓰지 않는다.
+  const [closesAt, setClosesAt] = useState(0);
   const [now, setNow] = useState(Date.now());
   const [error, setError] = useState('');
   const heldImage = useRef<string|null>(null);
@@ -78,7 +78,7 @@ export function PhoneLink({ idle, onImage }: Props) {
         ? <p className="hint">같은 Wi-Fi에서 폰 카메라로 QR을 찍고 영수증을 촬영하면 왼쪽 미리보기에 들어옵니다. 주소에 연결 전용 열쇠가 들어 있어 코드만으로는 보낼 수 없습니다.</p>
         : <p className="hint">폰 연결됨. 확인 중인 영수증을 처리하면 다음 사진을 가져옵니다.</p>}
       <p className="hint meta" role="status">
-        {pending > 0 ? `대기 중인 사진 ${pending}장` : '대기 중인 사진 없음'} · 이 코드 종료까지 {remainingText(closesAt, now)} · 만든 지 {room.maxLifeMinutes}분이면 자동 종료, PC 화면을 닫으면 {room.idleMinutes}분 뒤 종료{error ? ` · ${error}` : ''}
+        {pending > 0 ? `대기 중인 사진 ${pending}장` : '대기 중인 사진 없음'} · 이 코드 종료까지 {remainingText(closesAt, now)} · 발급 후 {room.maxLifeMinutes}분간 사용 가능{error ? ` · ${error}` : ''}
       </p>
     </div>
     <button type="button" className="renew" onClick={() => openRoom(room)}>새 코드 받기</button>

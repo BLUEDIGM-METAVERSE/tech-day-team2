@@ -2,18 +2,18 @@ import { createServer } from 'node:http';
 import { networkInterfaces } from 'node:os';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { mockEngine } from './ocr/engine.mjs';
+import { OcrError } from './ocr/gemini.mjs';
 
 // ---- 폰 → PC 이미지 중계(시제품) ----
 // PC가 방(6자리 코드 + 비밀 열쇠)을 만들고, 폰이 QR로 받은 코드·열쇠로 이미지를 올리면 PC가 가져간다.
 // 이미지는 서버 메모리에만 잠깐 있다가 PC가 가져가는 즉시 지워진다. 디스크·DB·로그에 남기지 않는다.
 // - 코드는 사람이 보는 표시용이고, 실제 인증은 QR 주소에 든 열쇠가 한다. 코드가 우연히 같아도 열쇠가 다르면 거부된다.
 // - 닫힌 방의 코드는 한동안 재발급하지 않는다(서버 메모리 기준, 재시작하면 초기화).
-const ROOM_IDLE_MS = 10 * 60 * 1000;      // 활동 없이 10분이면 닫힘
 const ROOM_MAX_LIFE_MS = 30 * 60 * 1000;  // PC가 계속 보고 있어도 만든 지 30분이면 닫힘
 const RECENT_CODE_MS = 6 * 60 * 60 * 1000; // 닫힌 코드를 다시 쓰지 않는 기간
 const MAX_BODY_BYTES = 8 * 1024 * 1024;
 const MAX_QUEUE = 20;
-const rooms = new Map();       // code -> { key, queue: string[], createdAt, lastSeen }
+const rooms = new Map();       // code -> { key, queue: string[], createdAt }
 const recentCodes = new Map(); // code -> 닫힌 시각
 
 function json(res, status, body) { res.writeHead(status); res.end(JSON.stringify(body)); }
@@ -37,8 +37,7 @@ function newCode() {
 function closeRoom(code) {
   if (rooms.delete(code)) recentCodes.set(code, Date.now());
 }
-function expired(room, now = Date.now()) { return now - room.lastSeen > ROOM_IDLE_MS || now - room.createdAt > ROOM_MAX_LIFE_MS; }
-function expiresAt(room) { return Math.min(room.lastSeen + ROOM_IDLE_MS, room.createdAt + ROOM_MAX_LIFE_MS); }
+function expired(room, now = Date.now()) { return now >= closesAt(room); }
 // PC가 계속 보고 있어도 넘길 수 없는 절대 종료 시각. PC 화면의 남은 시간 표시는 이 값을 쓴다.
 function closesAt(room) { return room.createdAt + ROOM_MAX_LIFE_MS; }
 function keyMatches(room, key) {
@@ -54,7 +53,6 @@ function openRoom(code, key) {
   if (!room) return undefined;
   if (expired(room)) { closeRoom(code); return undefined; }
   if (!keyMatches(room, key)) return undefined;
-  room.lastSeen = Date.now();
   return room;
 }
 // 본문을 끝까지 읽되 상한을 넘으면 그 뒤는 버린다. 중간에 끊으면 클라이언트가 응답을 못 받으므로 끝까지 받은 뒤 413을 돌려준다.
@@ -67,7 +65,7 @@ function readBody(req, limit) {
       if (size > limit) { tooLarge = true; chunks.length = 0; return; }
       chunks.push(chunk);
     });
-    req.on('end', () => tooLarge ? reject(new Error('TOO_LARGE')) : resolve(Buffer.concat(chunks).toString('utf8')));
+    req.on('end', () => tooLarge ? reject(new Error('TOO_LARGE')) : resolve(Buffer.concat(chunks)));
     req.on('error', reject);
   });
 }
@@ -76,6 +74,47 @@ setInterval(() => {
   for (const [code, room] of rooms) if (expired(room, now)) closeRoom(code);
   for (const [code, closedAt] of recentCodes) if (now - closedAt > RECENT_CODE_MS) recentCodes.delete(code);
 }, 30 * 1000).unref();
+
+const IMAGE_SIGNATURES = {
+  'image/png': bytes => bytes.subarray(0, 8).equals(Buffer.from('89504e470d0a1a0a', 'hex')),
+  'image/jpeg': bytes => bytes.subarray(0, 3).equals(Buffer.from('ffd8ff', 'hex')),
+  'image/webp': bytes => bytes.toString('ascii', 0, 4) === 'RIFF' && bytes.toString('ascii', 8, 12) === 'WEBP',
+};
+
+async function extractImage(req, res, engine) {
+  const mimeType = req.headers['content-type'];
+  if (!Object.hasOwn(IMAGE_SIGNATURES, mimeType)) {
+    req.resume();
+    return fail(res, 415, 'BAD_IMAGE', 'JPG·PNG·WebP 이미지를 선택해 주세요.');
+  }
+  // 마스킹 확인은 현재 생략한다. PC 미리보기에서 확인한 사진을 사용한다.
+  let bytes;
+  try { bytes = await readBody(req, MAX_BODY_BYTES); }
+  catch (error) {
+    if (res.destroyed) return;
+    if (error.message === 'TOO_LARGE') return fail(res, 413, 'BAD_IMAGE', '이미지는 최대 8 MiB까지 보낼 수 있습니다.');
+    return fail(res, 400, 'BAD_IMAGE', '이미지를 읽을 수 없습니다.');
+  }
+  if (!IMAGE_SIGNATURES[mimeType](bytes)) return fail(res, 400, 'BAD_IMAGE', '이미지가 비어 있거나 파일 형식이 올바르지 않습니다.');
+
+  const controller = new AbortController();
+  const cancel = () => controller.abort();
+  res.once('close', cancel);
+  try {
+    if (res.destroyed) return;
+    const result = await engine.extract({ bytes, mimeType, signal: controller.signal });
+    if (!controller.signal.aborted) return json(res, 200, result);
+  } catch (error) {
+    if (controller.signal.aborted) return;
+    if (error instanceof OcrError) {
+      console.warn('[OCR][gemini] 추출 실패', { code: error.code, status: error.status });
+      return fail(res, error.status, error.code, error.message);
+    }
+    throw error;
+  } finally {
+    res.off('close', cancel);
+  }
+}
 
 async function route(req, res, engine) {
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
@@ -86,6 +125,7 @@ async function route(req, res, engine) {
   if (req.method === 'GET' && url.pathname === '/api/health') return json(res, 200, { status: 'ok', mode: engine.mode });
 
   if (req.method === 'POST' && url.pathname === '/api/extract') {
+    if (engine.mode === 'gemini') return extractImage(req, res, engine);
     req.resume();
     return json(res, 200, await engine.extract());
   }
@@ -95,9 +135,9 @@ async function route(req, res, engine) {
     req.resume();
     const now = Date.now();
     const code = newCode();
-    const room = { key: randomBytes(16).toString('hex'), queue: [], createdAt: now, lastSeen: now };
+    const room = { key: randomBytes(16).toString('hex'), queue: [], createdAt: now };
     rooms.set(code, room);
-    return json(res, 201, { code, key: room.key, hosts: lanHosts(), expiresAt: expiresAt(room), closesAt: closesAt(room), maxLifeMinutes: ROOM_MAX_LIFE_MS / 60000, idleMinutes: ROOM_IDLE_MS / 60000 });
+    return json(res, 201, { code, key: room.key, hosts: lanHosts(), expiresAt: closesAt(room), closesAt: closesAt(room), maxLifeMinutes: ROOM_MAX_LIFE_MS / 60000, idleMinutes: ROOM_MAX_LIFE_MS / 60000 });
   }
 
   const match = /^\/api\/rooms\/(\d{6})(\/images|\/next)?$/.exec(url.pathname);
@@ -107,7 +147,7 @@ async function route(req, res, engine) {
     if (!room) { req.resume(); return fail(res, 404, 'ROOM_NOT_FOUND', '연결이 만료되었거나 코드가 올바르지 않습니다. PC 화면의 QR을 다시 찍어 주세요.'); }
 
     // 방 상태 (폰 연결 확인·PC 대기 수 표시)
-    if (req.method === 'GET' && !action) return json(res, 200, { ok: true, pending: room.queue.length, expiresAt: expiresAt(room), closesAt: closesAt(room) });
+    if (req.method === 'GET' && !action) return json(res, 200, { ok: true, pending: room.queue.length, expiresAt: closesAt(room), closesAt: closesAt(room) });
 
     // 방 닫기 (PC의 "새 코드 받기"): 즉시 무효화하고 코드를 재사용 금지 목록에 넣는다
     if (req.method === 'DELETE' && !action) { req.resume(); closeRoom(code); return json(res, 200, { closed: true }); }
@@ -116,7 +156,7 @@ async function route(req, res, engine) {
     if (req.method === 'POST' && action === '/images') {
       if (room.queue.length >= MAX_QUEUE) { req.resume(); return fail(res, 429, 'QUEUE_FULL', 'PC에서 먼저 받은 사진을 처리한 뒤 다시 보내 주세요.'); }
       let body;
-      try { body = await readBody(req, MAX_BODY_BYTES); }
+      try { body = (await readBody(req, MAX_BODY_BYTES)).toString('utf8'); }
       catch (e) { return fail(res, e.message === 'TOO_LARGE' ? 413 : 400, 'BAD_IMAGE', '이미지가 너무 크거나 읽을 수 없습니다.'); }
       if (!/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(body)) return fail(res, 400, 'BAD_IMAGE', '지원하지 않는 이미지 형식입니다.');
       room.queue.push(body);
@@ -126,7 +166,7 @@ async function route(req, res, engine) {
     // 다음 이미지 가져가기 (PC): 전달 즉시 서버에서 지운다
     if (req.method === 'GET' && action === '/next') {
       const image = room.queue.shift() ?? null;
-      return json(res, 200, { image, pending: room.queue.length, expiresAt: expiresAt(room), closesAt: closesAt(room) });
+      return json(res, 200, { image, pending: room.queue.length, expiresAt: closesAt(room), closesAt: closesAt(room) });
     }
   }
 
