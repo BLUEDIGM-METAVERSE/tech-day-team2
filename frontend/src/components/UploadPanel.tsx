@@ -1,5 +1,6 @@
 import type { OcrMode } from '../services/extract';
 import { ReceiptMaskEditor } from './ReceiptMaskEditor';
+import { ImageFileDrop } from './ImageFileDrop';
 
 interface Props {
   preview: string | null;
@@ -16,8 +17,7 @@ export function UploadPanel({ preview, busy, preparing, mode, onSelect, onExtrac
   const gemini = mode === 'gemini';
   return <section aria-busy={disabled} className="card">
     <h2>영수증 업로드</h2>
-    <p className="hint">QR로 사진을 보내거나 JPG·PNG·WebP 파일을 선택하세요.</p>
-    <label className="drop">이미지 선택<input type="file" accept="image/jpeg,image/png,image/webp" disabled={disabled} onChange={e => {const file=e.target.files?.[0]; e.target.value=''; if(file) onSelect(file);}} /></label>
+    <ImageFileDrop disabled={disabled} onFiles={files => onSelect(files[0])}/>
     {preview && <button disabled={disabled} onClick={() => onSelect()}>이미지 제거</button>}
     {gemini && preview ? <ReceiptMaskEditor key={preview} preview={preview} disabled={disabled} busy={busy}
       onExtract={onExtract} onEdit={onMaskEdit}/> : <>

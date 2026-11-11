@@ -118,12 +118,12 @@ export function ReceiptMaskEditor({ preview, disabled, busy, onExtract, onEdit }
         <button type="button" onClick={() => dialog.current?.close()}>닫기</button>
       </div>
       <p className="hint">사진에서 카드번호나 주소를 드래그해 가리세요. 확대하면 스크롤로 사진의 다른 부분을 볼 수 있습니다.</p>
-      <div className="receipt-mask-toolbar">
-        <label>확대 <select value={zoom} disabled={editing} onChange={event => setZoom(Number(event.target.value))}>
+      <div className="receipt-mask-toolbar receipt-mask-controls">
+        <label className="receipt-mask-zoom">확대 <span className="receipt-mask-select"><select value={zoom} disabled={editing} onChange={event => setZoom(Number(event.target.value))}>
           <option value={100}>너비 맞춤</option>
           <option value={150}>150%</option>
           <option value={200}>200%</option>
-        </select></label>
+        </select></span></label>
         <button type="button" disabled={disabled || editing || !regions.length} onClick={() => {
           setRegions(current => current.slice(0, -1));
           edit();
@@ -146,8 +146,8 @@ export function ReceiptMaskEditor({ preview, disabled, busy, onExtract, onEdit }
       </div>
       {error && <p className="error" role="alert">{error}</p>}
       <div className="receipt-mask-toolbar">
-        <label><input type="checkbox" checked={confirmed} disabled={disabled || editing || !image || !!error}
-          onChange={event => setConfirmed(event.target.checked)}/> 이 사진에 가릴 민감정보가 남아 있지 않음을 확인했습니다.</label>
+        <label className="receipt-mask-confirm"><input type="checkbox" checked={confirmed} disabled={disabled || editing || !image || !!error}
+          onChange={event => setConfirmed(event.target.checked)}/><span>이 사진에 가릴 민감정보가 남아 있지 않음을 확인했습니다.</span></label>
         <button type="button" disabled={!confirmed || editing || !!error} onClick={() => dialog.current?.close()}>
           확인하고 닫기
         </button>

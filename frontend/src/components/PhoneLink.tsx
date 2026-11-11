@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import qrcode from 'qrcode-generator';
 import { checkRoom, closeRoom, createRoom, isRoomGone, nextImage, type RoomInfo } from '../services/relay';
 
-interface Props { idle: boolean; onImage: (dataUrl: string) => boolean | void }
+interface Props { destination?: 'ocr' | 'print'; idle: boolean; onImage: (dataUrl: string) => boolean | void }
 const POLL_MS = 2000;
 
 function phoneUrl(room: RoomInfo): string {
@@ -22,13 +22,14 @@ function remainingText(expiresAt: number, now: number): string {
 
 // PC 쪽: 방을 만들어 QR을 보여주고, 폰이 올린 이미지를 가져와 업로드 흐름에 넣는다.
 // 방은 생성 30분 후 닫히고, PC에서 만료를 확인하면 새 코드를 발급한다.
-export function PhoneLink({ idle, onImage }: Props) {
+export function PhoneLink({ idle, onImage, destination = 'ocr' }: Props) {
   const [room, setRoom] = useState<RoomInfo | null>(null);
   const [pending, setPending] = useState(0);
   const [closesAt, setClosesAt] = useState(0);
   const [now, setNow] = useState(Date.now());
   const [error, setError] = useState('');
   const heldImage = useRef<string|null>(null);
+  const polling = useRef(false); // 탭 전환으로 타이머가 바뀌어도 진행 중인 조회와 겹치지 않는다.
   const onImageRef = useRef(onImage); onImageRef.current = onImage;
 
   async function openRoom(previous?: RoomInfo | null) {
@@ -41,9 +42,8 @@ export function PhoneLink({ idle, onImage }: Props) {
 
   useEffect(() => {
     if (!room) return;
-    let busy = false;
     const timer = window.setInterval(async () => {
-      if (busy) return; busy = true;
+      if (polling.current) return; polling.current = true;
       try {
         if (idle && heldImage.current) {
           if (onImageRef.current(heldImage.current) !== false) heldImage.current=null;
@@ -62,7 +62,7 @@ export function PhoneLink({ idle, onImage }: Props) {
       } catch (e) {
         if (isRoomGone(e)) await openRoom(); // 만료되면 새 코드 발급
         else setError('서버와 연결이 불안정합니다.');
-      } finally { busy = false; }
+      } finally { polling.current = false; }
     }, POLL_MS);
     return () => window.clearInterval(timer);
   }, [room, idle]);
@@ -75,7 +75,7 @@ export function PhoneLink({ idle, onImage }: Props) {
     <div className="info">
       <div className="head"><h3>폰으로 촬영해서 보내기</h3><span className="code" aria-label="연결 코드">{room.code}</span></div>
       {idle
-        ? <p className="hint">같은 Wi-Fi에서 폰 카메라로 QR을 찍고 영수증을 촬영하면 왼쪽 미리보기에 들어옵니다. 주소에 연결 전용 열쇠가 들어 있어 코드만으로는 보낼 수 없습니다.</p>
+        ? <p className="hint">같은 Wi-Fi에서 폰 카메라로 QR을 찍고 영수증을 촬영하면 {destination === 'print' ? '출력 목록에 추가됩니다' : '왼쪽 미리보기에 들어옵니다'}. 주소에 연결 전용 열쇠가 들어 있어 코드만으로는 보낼 수 없습니다.</p>
         : <p className="hint">폰 연결됨. 확인 중인 영수증을 처리하면 다음 사진을 가져옵니다.</p>}
       <p className="hint meta" role="status">
         {pending > 0 ? `대기 중인 사진 ${pending}장` : '대기 중인 사진 없음'} · 이 코드 종료까지 {remainingText(closesAt, now)} · 발급 후 {room.maxLifeMinutes}분간 사용 가능{error ? ` · ${error}` : ''}

@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>지출결의서 자동화 · 시연</title>
+<style>
+:root{font-family:"Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;color:#1c2230;background:#f4f5f8;line-height:1.55}
+*{box-sizing:border-box}body{margin:0}button{font:inherit;color:inherit;background:white;border:1px solid #dce3ed;border-radius:8px;padding:8px 13px;cursor:pointer}button:disabled{opacity:.45;cursor:default}button:focus-visible{outline:2px solid #2f5bd3;outline-offset:3px}.primary{background:#2f5bd3;color:white;border-color:#2f5bd3;font-weight:700}
+header{background:white;border-bottom:1px solid #e2e5ea;padding:14px max(20px,calc((100vw - 1170px)/2));display:flex;justify-content:space-between;gap:12px;align-items:center}header b{font-size:17px}.badge{background:#edf2ff;color:#2448ad;border-radius:20px;padding:4px 10px;font-size:12px;white-space:nowrap}
+main{max-width:1210px;margin:auto;padding:26px 20px 32px}.demo-title{display:flex;align-items:end;justify-content:space-between;gap:16px}.demo-title h1{margin:0;font-size:clamp(22px,3vw,31px)}p{margin:6px 0}.hint{color:#5d6575;font-size:13px}.controls{display:flex;gap:6px;flex-wrap:wrap}.steps{display:flex;gap:6px;margin:18px 0 12px;overflow:auto;padding:3px}.steps button{white-space:nowrap;font-size:12px;padding:6px 9px}.steps button[aria-current=step]{color:#2448ad;background:#edf2ff;border-color:#95aef4;font-weight:700}.guide{padding:13px 16px;margin-bottom:15px;background:#edf2ff;border:1px solid #d7e2ff;border-radius:10px}.guide h2{font-size:16px;margin:0}.guide p{font-size:13px;margin:3px 0 0;color:#374563}
+.app{background:#f8f9fc;border:1px solid #dce3ed;border-radius:14px;overflow:hidden;position:relative}.app-content{padding:18px}.app-tabs{display:flex;gap:6px;border-bottom:1px solid #dce3ed;margin-bottom:14px}.app-tabs button{border:0;border-radius:8px 8px 0 0;background:transparent;padding:10px 14px;font-size:13px}.app-tabs button.active{background:#edf2ff;border-bottom:3px solid #315ddd;color:#2448ad;font-weight:700}.phone{background:white;border:1px solid #e2e5ea;border-radius:10px;padding:10px 14px;margin-bottom:14px;display:flex;align-items:center;gap:12px}.phone b{font-size:13px}.phone .hint{margin:0}.phone strong{color:#2f5bd3;letter-spacing:2px}.columns{display:grid;grid-template-columns:250px minmax(0,1fr);gap:12px}.card{background:white;border:1px solid #e2e5ea;border-radius:10px;padding:14px}.card h3,.paper-head h3{margin:0 0 8px;font-size:15px}.drop{width:100%;padding:15px 8px;border:2px dashed #95adea;background:#f3f6ff;color:#315ddd;line-height:1.6}.drop small{color:#5d6575}.empty{padding:36px 12px;text-align:center;border:1px dashed #dce3ed;color:#65738a;border-radius:8px;font-size:13px}.receipt-button{display:block;margin:10px auto;padding:0;border:0;background:transparent}.receipt{width:138px;background:#fffdf6;color:#253040;text-align:left;font:11px/1.5 ui-monospace,monospace;padding:10px 8px;box-shadow:0 1px 4px #1c223022}.receipt b{display:block;text-align:center;font-size:13px;margin-bottom:4px}.receipt .rule{border-top:1px dashed #8c94a0;margin:5px 0}.receipt .line{display:flex;justify-content:space-between;gap:5px}.receipt .total{font-weight:bold}.masked{background:#111;color:transparent;border-radius:1px}.receipt-background{background:#d8d0c2;padding:10px}.row-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin:12px 0}.field{font-size:12px;color:#5d6575}.field strong{display:block;background:#f5f7fb;border:1px solid #dce3ed;border-radius:6px;padding:8px;color:#1c2230;overflow-wrap:anywhere}.expense{margin-top:12px}.table-wrap{overflow:auto}table{width:100%;min-width:420px;border-collapse:collapse;font-size:12px}th,td{text-align:left;border:1px solid #dce3ed;padding:8px}th{background:#ead3de}.screen-modal{position:absolute;inset:0;background:#1620308c;display:grid;place-items:center;padding:16px;z-index:5}.modal{width:min(510px,100%);max-height:100%;overflow:auto;background:white;border-radius:12px;padding:16px;box-shadow:0 12px 35px #0003}.modal h3{margin:0;font-size:17px}.modal .receipt-background{width:max-content;margin:10px auto}.modal .receipt{width:210px;font-size:13px}.modal .receipt b{font-size:16px}.modal-footer{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}.modal-footer label{font-size:12px;background:#edf2ff;padding:7px;border-radius:6px}.crop-box{position:relative;outline:2px solid #315ddd}.crop-handle{position:absolute;width:12px;height:12px;background:#25334f;border:2px solid white;border-radius:2px}.tl{top:-6px;left:-6px}.tr{top:-6px;right:-6px}.bl{bottom:-6px;left:-6px}.br{bottom:-6px;right:-6px}.crop-demo .receipt-background{padding:18px}.crop-demo.applied .receipt-background{padding:0;animation:trim .35s ease-out}@keyframes trim{from{padding:18px}to{padding:0}}@media(prefers-reduced-motion:reduce){.crop-demo.applied .receipt-background{animation:none}}
+.paper-head{display:flex;justify-content:space-between;align-items:center;gap:8px}.paper-bed{background:#e3e8ef;padding:10px;border-radius:8px}.paper{background:white;aspect-ratio:210/297;max-width:370px;margin:auto;position:relative;box-shadow:0 2px 10px #0002}.paper-item{position:absolute;top:5%;width:39%;cursor:grab;padding:0;border:0;background:transparent;text-align:left}.paper-item .receipt{width:100%;font-size:clamp(7px,1.2vw,10px);box-shadow:none}.paper-item .receipt b{font-size:inherit}.paper-item:nth-child(1){left:7%}.paper-item:nth-child(2){left:54%}.paper-item:nth-child(3){left:7%;top:52%}.paper-item.cropped .receipt-background{background:transparent;padding:0}.paper-item.dragging{opacity:.4}.paper-item.over{outline:2px solid #315ddd}.paper-item.attention{outline:2px solid #315ddd}.paper-item .receipt-background{padding:7px}.print-options{display:flex;flex-wrap:wrap;gap:5px;margin:9px 0}.print-options span{font-size:12px;background:#f4f5f8;padding:3px 7px;border-radius:5px}.print-button{width:100%;margin-top:9px}.status{min-height:1.55em}.print-only{display:none}.footer{display:flex;justify-content:space-between;gap:8px;margin-top:10px}
+@media(max-width:650px){main{padding:16px 12px}.demo-title{align-items:start;flex-direction:column}.columns{grid-template-columns:1fr}.app-content{padding:10px}.app-tabs button{padding:7px;font-size:11px}.screen-modal{align-items:start}.modal{margin-top:10px}.phone{gap:7px}.phone .hint{font-size:11px}.paper{max-width:300px}}
+@page{size:A4 portrait;margin:0}
+@media print{body{background:white}header,main{display:none}.print-only{display:block}.print-only .paper{width:210mm;height:297mm;max-width:none;margin:0;box-shadow:none}.print-only .paper-item .receipt{font-size:12pt}.print-only .paper-item .receipt-background{background:white}.print-only .paper-item .receipt b{font-size:15pt}}
+</style>
+</head>
+<body>
+<header><b>지출결의서 자동화</b><span class="badge">테크데이 2팀 · 시연</span></header>
+<main>
+  <div class="demo-title">
+    <div><h1>영수증 업로드부터 A4 출력까지</h1><p class="hint">가상 영수증과 샘플 OCR 결과를 사용합니다.</p></div>
+    <div class="controls" aria-label="시연 재생 조작"><button id="previous">← 이전</button><button id="play">자동 재생</button><button id="next" class="primary">다음 →</button></div>
+  </div>
+  <nav class="steps" id="steps" aria-label="시연 단계"></nav>
+  <div class="guide" aria-live="polite"><h2 id="guideTitle"></h2><p id="guideText"></p></div>
+  <div class="app" id="app"></div>
+  <div class="footer hint"><span>← → 키로 단계를 이동할 수 있습니다.</span><span id="progress"></span></div>
+</main>
+<div class="print-only" id="pdf"></div>
+<script>
+'use strict';
+const steps = [
+  ['진입', '01 영수증 업로드 및 OCR 추출에서 시작합니다.'],
+  ['영수증 업로드', '가상 영수증을 선택했습니다. 사진을 클릭하면 민감정보 가리기 팝업이 열립니다.'],
+  ['민감정보 가리기', '카드번호를 가린 상태입니다. 확인한 뒤 결과 불러오기를 누릅니다.'],
+  ['OCR 인식', '인식한 일자, 거래처, 금액을 확인하고 필요한 내용을 수정합니다.'],
+  ['목록에 추가', '확인한 영수증이 부서경비 목록에 추가됐습니다. 다른 샘플도 같은 방식으로 추가합니다.'],
+  ['배치 탭 이동', '02 영수증 배치 및 출력에 01에서 올린 사진 세 장이 표시됩니다.'],
+  ['사진 자르기', '사진을 클릭해 잘라내기를 열고, 테두리 손잡이를 안쪽으로 옮겨 배경을 잘라냅니다.'],
+  ['드래그 배치', 'A4 위 사진을 다른 사진 위에 끌어 놓아 위치를 바꿔 보세요. 버튼으로도 교환을 시연할 수 있습니다.'],
+  ['PDF로 출력', '인쇄 / PDF 저장을 누르고 인쇄 창에서 PDF로 저장을 선택합니다.'],
+];
+const receipts = [
+  { shop:'테크데이 카페', date:'2026-11-11', title:'커피 외 1건', total:'15,000' },
+  { shop:'팀 마켓', date:'2026-11-11', title:'간식', total:'24,800' },
+  { shop:'오피스 스토어', date:'2026-11-11', title:'사무용품', total:'32,000' },
+];
+const $ = id => document.getElementById(id);
+let step = 0, timer = null, order = [0,1,2], cropApplied = false, confirmed = true, dragged = null;
+function receipt(i, mask = false) {
+  const r = receipts[i];
+  return '<div class="receipt"><b>' + r.shop + '</b><div style="text-align:center">가상 영수증</div><div class="rule"></div><div>일자 ' + r.date + '</div><div class="line"><span>' + r.title + '</span><span>' + r.total + '</span></div><div class="rule"></div><div class="line total"><span>합계</span><span>' + r.total + '원</span></div><div>카드 <span class="' + (mask?'masked':'') + '">0000-0000-0000-0000</span></div></div>';
+}
+function paper(print = false) {
+  return '<div class="paper">' + order.map((i, slot) => {
+    const cropped = i === 0 && (step >= 7 || cropApplied);
+    const content = '<div class="receipt-background">' + receipt(i) + '</div>';
+    return print ? '<div class="paper-item' + (cropped?' cropped':'') + '">' + content + '</div>'
+      : '<div class="paper-item' + (cropped?' cropped':'') + '" draggable="true" data-slot="' + slot + '" aria-label="' + receipts[i].shop + '">' + content + '</div>';
+  }).join('') + '</div>';
+}
+function uploadScreen() {
+  let result = '<div class="empty">영수증을 선택하고 결과를 불러오세요.</div>';
+  if (step === 3) result = '<div class="row-grid"><div class="field">일자<strong>2026-11-11</strong></div><div class="field">거래처<strong>테크데이 카페</strong></div><div class="field">금액<strong>15,000원</strong></div></div><button class="primary" data-go="4">목록에 추가</button>';
+  const photo = step === 1 || step === 2 || step === 3
+    ? '<button class="receipt-button" data-go="2" aria-label="사진 크게 보기 및 가리기">' + receipt(0, step >= 2) + '</button>' : '';
+  const rows = step === 4
+    ? '<div class="table-wrap"><table><thead><tr><th>일자</th><th>계정과목</th><th>비용 상세내역</th><th>거래처</th><th>금액</th><th>결제수단</th></tr></thead><tbody><tr><td>2026-11-11</td><td>야근(특근)식비</td><td>커피 외 1건</td><td>테크데이 카페</td><td>15,000</td><td>개인카드</td></tr></tbody></table></div>'
+    : '<div class="empty">아직 추가한 영수증이 없습니다.</div>';
+  return '<div class="columns"><section class="card"><h3>영수증 업로드</h3><button class="drop" data-go="1">클릭해서 파일 선택<br><small>JPG · PNG · WebP</small></button>' + photo + '<button class="primary print-button" data-go="3" ' + (step !== 3?'disabled':'') + '>결과 불러오기</button></section><section class="card"><h3>추출 결과 확인</h3><p class="hint">결과를 확인·수정한 뒤 목록에 추가하세요.</p>' + result + '</section></div><section class="card expense"><h3>지출결의서 목록</h3>' + rows + '</section>';
+}
+function printScreen() {
+  return '<div class="columns"><section class="card"><h3>영수증 인쇄 배치</h3><button class="drop" disabled>클릭해서 파일 선택<br><small>출력 전용 사진 추가</small></button><div class="print-options"><span>폭 80mm</span><span>간격 6mm</span><span>여백 10mm</span></div><button class="primary print-button" data-action="' + (step === 8?'print':'finish') + '">인쇄 / PDF 저장</button><p class="hint">A4 세로 · 배율 100% · 여백 없음</p></section><section><div class="paper-head"><h3>A4 출력 미리보기</h3><span class="hint">A4 1장</span></div><div class="paper-bed">' + paper() + '</div><p id="layoutStatus" class="hint status" role="status">' + (step === 7?'사진을 드래그해 위치를 교환할 수 있습니다.':'') + '</p>' + (step === 7?'<button data-action="swap">첫 번째와 두 번째 위치 교환</button>':'') + '</section></div>';
+}
+function modal() {
+  if (step === 2) return '<div class="screen-modal"><section class="modal" aria-label="영수증에서 민감정보 가리기"><h3>영수증에서 민감정보 가리기</h3><p class="hint">가릴 영역을 선택합니다. 카드번호가 가려졌습니다.</p><div class="receipt-background">' + receipt(0,true) + '</div><div class="modal-footer"><label><input id="confirm" type="checkbox" ' + (confirmed?'checked':'') + '> 가릴 민감정보가 남아 있지 않습니다.</label><button class="primary" data-go="3" ' + (confirmed?'':'disabled') + '>확인하고 결과 불러오기</button></div></section></div>';
+  if (step === 6) return '<div class="screen-modal"><section class="modal crop-demo' + (cropApplied?' applied':'') + '" aria-label="출력할 부분 잘라내기"><h3>출력할 부분 잘라내기</h3><p class="hint">사진 테두리의 손잡이를 안쪽으로 당겨 남길 영역을 정합니다.</p><div class="receipt-background"><div class="crop-box">' + receipt(0) + '<i class="crop-handle tl"></i><i class="crop-handle tr"></i><i class="crop-handle bl"></i><i class="crop-handle br"></i></div></div><div class="modal-footer"><button data-action="crop">' + (cropApplied?'원본 전체 사용':'손잡이 이동 시연') + '</button><button class="primary" data-go="7">자르기 적용</button></div></section></div>';
+  return '';
+}
+function render() {
+  $('guideTitle').textContent = steps[step][0];
+  $('guideText').textContent = steps[step][1];
+  $('progress').textContent = (step+1) + ' / ' + steps.length;
+  $('previous').disabled = step === 0;
+  $('next').disabled = step === steps.length - 1;
+  $('steps').innerHTML = steps.map(([name],i) => '<button data-go="' + i + '"' + (step===i?' aria-current="step"':'') + '>' + (i+1) + '. ' + name + '</button>').join('');
+  $('app').innerHTML = '<div class="app-content"><div class="app-tabs"><button class="' + (step<5?'active':'') + '" data-go="0">01 영수증 업로드 및 OCR 추출</button><button class="' + (step>=5?'active':'') + '" data-go="5">02 영수증 배치 및 출력 (' + (step>=5?3:step?1:0) + ')</button></div><div class="phone"><b>폰으로 촬영해서 보내기</b><strong>000000</strong><span class="hint">시연용 연결 코드</span></div>' + (step<5?uploadScreen():printScreen()) + '</div>' + modal();
+}
+function stop() { clearInterval(timer); timer = null; $('play').textContent = '자동 재생'; }
+function go(index, manual = true) {
+  if (manual) stop();
+  step = Math.min(steps.length - 1, Math.max(0,index));
+  if (step === 0) { order = [0,1,2]; cropApplied = false; confirmed = true; }
+  if (step === 8) stop();
+  render();
+}
+function swap(a,b) {
+  if (a === b || !Number.isInteger(a) || !Number.isInteger(b) || a < 0 || b < 0 || a >= order.length || b >= order.length) return;
+  [order[a],order[b]] = [order[b],order[a]];
+  render();
+  $('layoutStatus').textContent = '두 사진의 위치를 맞바꿨습니다.';
+}
+$('previous').onclick = () => go(step-1);
+$('next').onclick = () => go(step+1);
+$('play').onclick = () => {
+  if (timer) { stop(); return; }
+  if (step === 8) go(0);
+  $('play').textContent = '일시 정지';
+  timer = setInterval(() => {
+    if (step === 2) confirmed = true;
+    if (step === 6 && !cropApplied) { cropApplied = true; render(); return; }
+    if (step === 7 && order[0] === 0 && order[1] === 1) { swap(0,1); return; }
+    go(step+1,false);
+  }, 4500);
+};
+document.addEventListener('click',event => {
+  const button = event.target.closest('button');
+  if (button?.dataset.go !== undefined) { go(Number(button.dataset.go)); return; }
+  switch (button?.dataset.action) {
+    case 'crop': stop(); cropApplied = !cropApplied; render(); break;
+    case 'swap': stop(); swap(0,1); break;
+    case 'finish': go(8); break;
+    case 'print': stop(); $('pdf').innerHTML = paper(true); window.print(); break;
+    default: if (step === 5 && event.target.closest('[data-slot]')) go(6);
+  }
+});
+$('app').addEventListener('change',event => { if (event.target.id === 'confirm') { confirmed = event.target.checked; $('app').querySelector('.modal [data-go="3"]').disabled = !confirmed; } });
+$('app').addEventListener('dragstart',event => {
+  const item = event.target.closest('[data-slot]'); if (!item) return;
+  stop(); dragged = Number(item.dataset.slot); item.classList.add('dragging');
+  event.dataTransfer.setData('text/plain',String(dragged)); event.dataTransfer.effectAllowed = 'move';
+});
+$('app').addEventListener('dragover',event => {
+  const item = event.target.closest('[data-slot]');
+  if (dragged === null || !item) return;
+  event.preventDefault();
+  $('app').querySelectorAll('.over').forEach(el => el.classList.remove('over'));
+  if (Number(item.dataset.slot) !== dragged) item.classList.add('over');
+});
+$('app').addEventListener('drop',event => {
+  const item = event.target.closest('[data-slot]');
+  if (dragged === null || !item) return;
+  event.preventDefault(); const from = dragged; dragged = null; swap(from,Number(item.dataset.slot));
+});
+$('app').addEventListener('dragend',() => {
+  dragged = null; $('app').querySelectorAll('.dragging,.over').forEach(el => el.classList.remove('dragging','over'));
+});
+document.addEventListener('keydown',event => {
+  if (event.target.matches('input,select,textarea') || event.altKey || event.metaKey || event.ctrlKey) return;
+  if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { event.preventDefault(); go(step+(event.key==='ArrowRight'?1:-1)); }
+});
+render();
+</script>
+</body>
+</html>
