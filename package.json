@@ -10,6 +10,7 @@
   },
   "scripts": {
     "dev": "concurrently -k \"npm run dev -w backend\" \"npm run dev -w frontend\"",
+    "dev:local": "concurrently -k \"npm run dev -w backend\" \"npm run dev:local -w frontend\"",
     "build": "npm run build -w frontend",
     "check": "npm run check -w frontend && npm run check -w backend"
   },

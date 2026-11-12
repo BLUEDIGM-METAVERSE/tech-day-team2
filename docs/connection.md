@@ -69,7 +69,7 @@
 
 시각은 모두 epoch 밀리초다. PC는 `closesAt`으로 남은 시간을 표시한다.
 
-폰 주소는 `<protocol>://<host>:<port>/?room=<code>&key=<key>`다. PC의 QR을 스캔해 접속하며 코드만 입력하는 기능은 없다. 기본 개발 서버는 로컬 접속만 허용하므로 LAN 실행이 필요하다([README](../README.md)).
+폰 주소는 `<protocol>://<host>:<port>/?room=<code>&key=<key>`다. PC의 QR을 스캔해 접속하며 코드만 입력하는 기능은 없다. 기본 개발 서버(`npm run dev`)는 프런트를 LAN에 열어 폰 접속을 받는다. `npm run dev:local`은 로컬 접속만 허용해 폰에서 열 수 없다([README](../README.md)).
 
 ### 방 API
 
