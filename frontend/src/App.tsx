@@ -9,6 +9,7 @@ import { PhoneCapture } from './components/PhoneCapture';
 import { extractReceipt, getOcrMode, type OcrMode } from './services/extract';
 import { resizeImage } from './utils/image';
 import { sectionOf } from './utils/excel';
+import { duplicatesOf } from './utils/duplicate';
 import { ReceiptPrintPanel } from './components/ReceiptPrintPanel';
 import type { PrintItem, PrintPhoto } from './types/print';
 import { loadPrintImage } from './utils/printImage';
@@ -94,32 +95,55 @@ function Workspace() {
   const [busy,setBusy]=useState(false);
   const [preparing,setPreparing]=useState(false);
   const preparingRef=useRef(false);
-  const previewRef=useRef<string|null>(null);
   const requestRef=useRef(false);
   const [error,setError]=useState('');
   const version=useRef(0);
   const nextId=useRef(1); // http 접속(폰)에서는 crypto.randomUUID를 쓸 수 없어 일련번호를 쓴다.
   async function select(file?: File) {
     if(requestRef.current) return;
-    const current=++version.current; previewRef.current=null; setDraft(null); setPreview(null); setError('');
+    const current=++version.current; setDraft(null); setPreview(null); setError('');
     if (!file) {preparingRef.current=false; setPreparing(false); return;}
     preparingRef.current=true; setPreparing(true);
-    try { const image=await resizeImage(file); if(current===version.current) { await registerPrint(image, file.name, 'ocr'); if(current===version.current) {previewRef.current=image; setPreview(image);} } }
+    try { const image=await resizeImage(file); if(current===version.current) { await registerPrint(image, file.name, 'ocr'); if(current===version.current) setPreview(image); } }
     catch(e) { if(current===version.current) setError(e instanceof Error ? e.message : '이미지를 읽을 수 없습니다. 다른 이미지를 선택해 주세요.'); }
     finally { if(current===version.current) {preparingRef.current=false; setPreparing(false);} }
   }
-  // 폰에서 넘어온 이미지는 이미 1600px로 줄어 있어 그대로 미리보기에 넣는다.
+  // 01 탭에서 폰으로 받은 사진과 PC에서 여러 장 고른 파일은 모두 대기 목록에 쌓고, 미리보기가 비면 앞에서부터 한 장씩 올린다.
+  const [waiting,setWaiting]=useState<{id:number;image:string;name?:string}[]>([]);
+  const waitingId=useRef(1);
+  // 새로 고른 파일은 장수와 관계없이 대기 목록 뒤에 붙인다. 확인 중인 영수증과 이미 대기 중인 사진은 건드리지 않는다.
+  // 파일 없이 부르면 지금 미리보기만 제거한다.
+  async function selectFiles(files?: File[]) {
+    if (!files?.length) return select();
+    if (requestRef.current || preparingRef.current) return;
+    preparingRef.current=true; setPreparing(true); setError('');
+    const failures: string[] = [];
+    try {
+      for (const file of files) {
+        try { const image=await resizeImage(file); const id=waitingId.current++; setWaiting(list=>[...list,{id,image,name:file.name}]); }
+        catch { failures.push(file.name); }
+      }
+      if (failures.length) setError(`불러오지 못한 파일: ${failures.join(', ')}. JPG·PNG·WebP 파일인지 확인해 주세요.`);
+    } finally { preparingRef.current=false; setPreparing(false); }
+  }
   function receiveImage(dataUrl: string) {
     if (tab === 'print') {
       if (importingPrintRef.current || pendingImagesRef.current) return false;
       void registerPrint(dataUrl, `휴대폰 사진 ${nextImageId.current}`, 'print').catch(() => setError('휴대폰 사진을 읽지 못했습니다. 다시 보내 주세요.'));
       return true;
     }
-    if (preparingRef.current || requestRef.current || previewRef.current) return false;
-    previewRef.current=dataUrl; version.current++; setDraft(null); setError(''); setPreview(dataUrl);
-    void registerPrint(dataUrl, `휴대폰 사진 ${nextImageId.current}`, 'ocr').catch(() => setError('출력 사진을 준비하지 못했습니다. 다시 보내 주세요.'));
+    const id=waitingId.current++;
+    setWaiting(list=>[...list,{id,image:dataUrl}]);
     return true;
   }
+  // 대기 사진은 이미 1600px로 줄어 있어 그대로 미리보기에 넣는다.
+  useEffect(() => {
+    if (!waiting.length || preview || preparing || busy) return;
+    const next=waiting[0];
+    setWaiting(list=>list.filter(item=>item.id!==next.id));
+    version.current++; setDraft(null); setError(''); setPreview(next.image);
+    void registerPrint(next.image, next.name ?? `휴대폰 사진 ${nextImageId.current}`, 'ocr').catch(() => setError('출력 사진을 준비하지 못했습니다. 다시 올려 주세요.'));
+  }, [waiting, preview, preparing, busy]);
   // Paste follows the visible tab. Input fields and the crop/masking dialogs keep their own input behavior.
   useEffect(() => {
     function paste(event: ClipboardEvent) {
@@ -128,7 +152,7 @@ function Workspace() {
       if (!files.length) return;
       event.preventDefault();
       if (tab === 'print') void addPrintFiles(files);
-      else if (!preparingRef.current && !requestRef.current) void select(files[0]);
+      else if (!preparingRef.current && !requestRef.current) void selectFiles(files);
     }
     document.addEventListener('paste', paste);
     return () => document.removeEventListener('paste', paste);
@@ -154,13 +178,18 @@ function Workspace() {
     if(!draft) return;
     const row={...draft,id:String(nextId.current++)};
     setRows(list=>insertByDate(list,row));
-    version.current++; previewRef.current=null; setDraft(null); setPreview(null);
+    version.current++; setDraft(null); setPreview(null);
   }
   function changeRow(id: string, data: Partial<ReceiptData>) { setRows(list=>list.map(r=>r.id===id ? {...r,data:{...r.data,...data}} : r)); }
   function removeRow(id: string) { setRows(list=>list.filter(r=>r.id!==id)); }
   function moveRow(id: string, dir: -1 | 1) { setRows(list=>moveWithinSection(list,id,dir)); }
   const draftSection=draft ? sectionOf(draft.data) : 'dept';
   const nextNo=rows.filter(r=>sectionOf(r.data)===draftSection).length+1;
+  // 확인 중인 결과와 일자·거래처·금액이 같은 기존 행. 경비 구분과 관계없이 찾아 "부서경비 2번"처럼 알려 준다.
+  const draftDuplicates=draft ? duplicatesOf(rows.map(r=>r.data), draft.data).map(i=>{
+    const section=sectionOf(rows[i].data);
+    return `${section==='project' ? '프로젝트경비' : '부서경비'} ${rows.slice(0,i+1).filter(r=>sectionOf(r.data)===section).length}번`;
+  }) : [];
   return <><header><div className="brand">지출결의서 자동화 <span>테크데이 2팀</span></div><span className="badge">{mode === 'gemini' ? 'OCR · Gemini 모드' : mode === 'mock' ? 'OCR 시제품 · 샘플 모드' : 'OCR 모드 연결 대기'}</span></header>
     <main><div className="intro"><p>RECEIPT WORKSPACE</p><h1>영수증에서 필요한 정보만 간편하게</h1><p>영수증을 한 장씩 확인해 목록에 쌓은 뒤 한 번에 복사하세요. 새로고침하면 작업 내용이 사라집니다.</p></div>
       <nav className="workspace-tabs" role="tablist" aria-label="영수증 작업 메뉴">
@@ -169,15 +198,22 @@ function Workspace() {
           event.preventDefault(); const next = event.key === 'Home' ? 'ocr' : event.key === 'End' ? 'print' : id === 'ocr' ? 'print' : 'ocr'; setTab(next); document.getElementById(`${next}-tab`)?.focus();
         }}>{label}</button>)}
       </nav>
-      <PhoneLink destination={tab} idle={tab === 'print' ? !importingPrint && pendingImages === 0 : !preview && !busy && !preparing} onImage={receiveImage}/>
+      <PhoneLink destination={tab} idle={tab === 'print' ? !importingPrint && pendingImages === 0 : true} onImage={receiveImage}/>
       <div className="app-errors">
         {error && <p className="error" role="alert">{error}</p>}
         {tab === 'ocr' && modeError && <p className="error" role="alert">{modeError} <button onClick={() => { setModeError(''); setModeAttempt(attempt => attempt + 1); }}>다시 연결</button></p>}
       </div>
       <section id="ocr-panel" className="ocr-workspace" role="tabpanel" aria-labelledby="ocr-tab" hidden={tab !== 'ocr'}>
+        {waiting.length > 0 && <section className="card wait-strip" aria-label="대기 중인 사진">
+          <p className="hint" role="status">대기 중인 사진 {waiting.length}장 · 확인 중인 영수증을 목록에 추가하거나 제거하면 왼쪽 사진부터 차례로 올라옵니다. 새로고침하면 사라집니다.</p>
+          <ul>{waiting.map((item, i) => <li key={item.id}>
+            <img src={item.image} alt={`대기 사진 ${i + 1}`}/>
+            <button type="button" aria-label={`대기 사진 ${i + 1} 제거`} title="대기 사진 제거" onClick={() => setWaiting(list => list.filter(w => w.id !== item.id))}>×</button>
+          </li>)}</ul>
+        </section>}
         <div className="grid">
-          <UploadPanel preview={preview} busy={busy} preparing={preparing} mode={mode} onSelect={select} onExtract={extract} onMaskEdit={() => { setDraft(null); setError(''); }}/>
-          <ResultPanel draft={draft} nextNo={nextNo} onChange={setDraft} onAdd={addRow} onDiscard={()=>setDraft(null)}/>
+          <UploadPanel preview={preview} busy={busy} preparing={preparing} mode={mode} onSelect={selectFiles} onExtract={extract} onMaskEdit={() => { setDraft(null); setError(''); }}/>
+          <ResultPanel draft={draft} nextNo={nextNo} duplicates={draftDuplicates} onChange={setDraft} onAdd={addRow} onDiscard={()=>setDraft(null)}/>
         </div>
         <ExpenseList rows={rows} onChange={changeRow} onRemove={removeRow} onMove={moveRow}/>
       </section>

@@ -17,7 +17,7 @@ main{max-width:1680px}
 .section-block+.section-block{margin-top:28px;padding-top:20px;border-top:1px solid #e2e5ea}
 .section-block h3{font-size:14px;margin:0 0 10px}
 .count{font-weight:400;color:#5d6575;margin-left:6px}
-.row-invalid td{background:#fde9e7}
+.row-invalid td{background:#fde9e7}.row-duplicate td{background:#fff6d9}
 .row-actions{text-align:center}
 .row-actions{white-space:nowrap}
 .row-actions button{padding:6px 8px;font-size:12px;margin:4px 2px}
@@ -55,7 +55,14 @@ button:not(:disabled):active{transform:translateY(1px);background:#e4e8ef;box-sh
 .phone-page .shoot{display:block;text-align:center;padding:30px 16px;margin:16px 0;border:2px dashed #2f5bd3;border-radius:14px;font-size:18px;font-weight:700;color:#2f5bd3;background:#fff;cursor:pointer}
 .phone-page .shoot.busy{opacity:.6}
 .phone-page .shoot input{display:none}
-.phone-page .preview{display:block;max-width:100%;max-height:40vh;margin:12px auto;object-fit:contain;border:1px solid #e2e5ea;border-radius:8px}
+/* 폰 화면: 전송 전 담아 둔 사진과 전송 버튼 */
+.phone-page .tray-head{margin:4px 0 8px}
+.phone-page .tray{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;list-style:none;margin:0;padding:0}
+.phone-page .tray li{position:relative;aspect-ratio:3/4;border:1px solid #e2e5ea;border-radius:8px;overflow:hidden;background:#f3f4f7}
+.phone-page .tray img{display:block;width:100%;height:100%;object-fit:cover}
+.phone-page .tray button{position:absolute;top:4px;right:4px;width:32px;height:32px;padding:0;border:0;border-radius:50%;background:rgba(28,34,48,.78);color:#fff;font-size:20px;line-height:1;cursor:pointer}
+.phone-page .tray button:disabled,.phone-page .send:disabled{opacity:.5}
+.phone-page .send{display:block;width:100%;margin:14px 0;padding:18px 16px;border:0;border-radius:14px;background:#2f5bd3;color:#fff;font-size:18px;font-weight:700;cursor:pointer}
 @media(min-width:1451px){.grid{min-height:600px}}
 /* 폰 화면 보조 버튼: 갤러리·파일에서 선택 */
 .phone-page .shoot.pick{padding:16px;margin-top:0;border-style:solid;border-color:#c5cbd6;color:#1c2230;font-size:15px;font-weight:600}
@@ -209,3 +216,11 @@ button:not(:disabled):active{transform:translateY(1px);background:#e4e8ef;box-sh
 .print-position-guide { position: absolute; z-index: 15; pointer-events: none; border: 2px dashed #315ddd; background: #315ddd20; }
 .print-position-guide.invalid { border-color: #b33b32; background: #b33b3220; }
 @media print { .print-receipt.cut { border-color: #a4adba; } .print-position-guide, .print-auto-layout, .print-receipt-tools { display: none !important; } }
+
+/* 01 탭: 폰에서 받아 차례를 기다리는 사진 */
+.wait-strip{padding:14px 20px;margin-bottom:16px}
+.wait-strip .hint{margin:0 0 10px}
+.wait-strip ul{display:flex;gap:10px;margin:0;padding:0 0 4px;list-style:none;overflow-x:auto}
+.wait-strip li{position:relative;flex:none}
+.wait-strip img{display:block;width:84px;height:112px;object-fit:cover;border:1px solid #e2e5ea;border-radius:8px;background:#f4f5f8}
+.wait-strip button{position:absolute;top:4px;right:4px;width:24px;height:24px;padding:0;border-radius:50%;line-height:1;font-size:15px;color:#1c2230}

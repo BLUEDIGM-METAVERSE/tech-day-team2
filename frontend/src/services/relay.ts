@@ -8,7 +8,8 @@ export interface RoomRef { code: string; key: string }
 const roomPath = (room: RoomRef, action = '') => `/api/rooms/${room.code}${action}?key=${encodeURIComponent(room.key)}`;
 
 export function createRoom(): Promise<RoomInfo> { return call('/api/rooms', { method: 'POST' }); }
-export function closeRoom(room: RoomRef): Promise<{ closed: boolean }> { return call(roomPath(room), { method: 'DELETE' }); }
+// keepalive: 페이지가 닫히는 중에도 요청이 끝까지 나가도록 한다.
+export function closeRoom(room: RoomRef, keepalive = false): Promise<{ closed: boolean }> { return call(roomPath(room), { method: 'DELETE', keepalive }); }
 export function checkRoom(room: RoomRef): Promise<{ ok: true; pending: number; expiresAt: number; closesAt: number }> { return call(roomPath(room)); }
 export function sendImage(room: RoomRef, dataUrl: string): Promise<{ pending: number }> {
   return call(roomPath(room, '/images'), { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: dataUrl });

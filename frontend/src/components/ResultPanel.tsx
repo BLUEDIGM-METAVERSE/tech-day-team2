@@ -3,9 +3,9 @@ import { ACCOUNTS, type Section } from '../constants/accounts';
 import { isRowValid } from '../utils/excel';
 import { ExpenseRowFields } from './ExpenseRowFields';
 import { SheetHead } from './SheetHead';
-interface Props { draft: ReceiptResult | null; nextNo: number; onChange: (result: ReceiptResult) => void; onAdd: () => void; onDiscard: () => void }
+interface Props { draft: ReceiptResult | null; nextNo: number; duplicates: string[]; onChange: (result: ReceiptResult) => void; onAdd: () => void; onDiscard: () => void }
 // 방금 추출한 결과 한 건을 확인·수정한 뒤 목록에 추가하는 카드.
-export function ResultPanel({ draft, nextNo, onChange, onAdd, onDiscard }: Props) {
+export function ResultPanel({ draft, nextNo, duplicates, onChange, onAdd, onDiscard }: Props) {
   function update(data: Partial<ReceiptData>) { if (draft) onChange({...draft, data: {...draft.data, ...data}}); }
   // 경비 구분을 바꾸면 새 목록에 없는 계정과목은 비운다.
   function changeSection(section: Section) {
@@ -22,7 +22,8 @@ export function ResultPanel({ draft, nextNo, onChange, onAdd, onDiscard }: Props
         <tr><th className="row-number">{(section === 'project' ? 46 : 22) + nextNo - 1}</th><td className="entry-no">{nextNo}</td><ExpenseRowFields data={draft.data} section={section} onChange={update}/></tr>
       </tbody></table></div>
       {!valid && <p role="alert">일자·거래처를 입력하고, 금액은 0보다 큰 원 단위 정수인지 확인해 주세요.</p>}
-      <div className="copy-actions"><button className="primary" disabled={!valid} onClick={onAdd}>목록에 추가</button><button onClick={onDiscard}>버리기</button></div>
+      {duplicates.length > 0 && <p className="notice" role="status">일자·거래처·금액이 같은 내역이 이미 목록에 있습니다 ({duplicates.join(', ')}). 같은 영수증이 아닌지 확인해 주세요. 다른 건이면 그대로 추가할 수 있습니다.</p>}
+      <div className="copy-actions"><button className="primary" disabled={!valid} onClick={onAdd}>{duplicates.length > 0 ? '그래도 목록에 추가' : '목록에 추가'}</button><button onClick={onDiscard}>버리기</button></div>
       <p className="hint">계정과목·결제수단은 목록에서 선택하고, 프로젝트번호는 원본 목록을 확인해 직접 입력합니다. 목록에 넣은 뒤에도 수정할 수 있습니다.</p>
     </>}
   </section>;

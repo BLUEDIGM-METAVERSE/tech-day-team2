@@ -7,7 +7,7 @@ interface Props {
   busy: boolean;
   preparing: boolean;
   mode: OcrMode | null;
-  onSelect: (file?: File) => void;
+  onSelect: (files?: File[]) => void;
   onExtract: (image?: string) => void;
   onMaskEdit: () => void;
 }
@@ -17,7 +17,7 @@ export function UploadPanel({ preview, busy, preparing, mode, onSelect, onExtrac
   const gemini = mode === 'gemini';
   return <section aria-busy={disabled} className="card">
     <h2>영수증 업로드</h2>
-    <ImageFileDrop disabled={disabled} onFiles={files => onSelect(files[0])}/>
+    <ImageFileDrop multiple disabled={disabled} onFiles={onSelect}/>
     {preview && <button disabled={disabled} onClick={() => onSelect()}>이미지 제거</button>}
     {gemini && preview ? <ReceiptMaskEditor key={preview} preview={preview} disabled={disabled} busy={busy}
       onExtract={onExtract} onEdit={onMaskEdit}/> : <>

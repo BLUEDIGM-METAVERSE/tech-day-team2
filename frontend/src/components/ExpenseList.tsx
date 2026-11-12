@@ -3,6 +3,7 @@ import type { ExpenseRow, ReceiptData } from '../types/receipt';
 import type { Section } from '../constants/accounts';
 import { isRowValid, rowsHtml, rowsTsv, sectionOf } from '../utils/excel';
 import { copyTextAndHtml } from '../utils/clipboard';
+import { duplicateGroups } from '../utils/duplicate';
 import { ExpenseRowFields } from './ExpenseRowFields';
 import { SheetHead } from './SheetHead';
 interface Props {
@@ -39,7 +40,15 @@ export function ExpenseList({ rows, onChange, onRemove, onMove }: Props) {
       toast(template ? label + ' ' + count + '행을 복사했습니다. 양식의 첫 빈 행 B열에 Ctrl+V로 붙여넣으세요.' : label + ' ' + count + '행을 복사했습니다. 빈 엑셀 셀에 붙여넣으세요.');
     } catch { setManual(text); toast('자동 복사가 지원되지 않습니다. 아래 내용을 선택해 복사하세요.', true); }
   }
+  // 일자·거래처·금액이 같은 행은 경비 구분과 관계없이 묶어 알려 준다. 경고만 하며 복사는 막지 않는다.
+  const label = (row: ExpenseRow) => {
+    const section = SECTIONS.find(s => s.key === sectionOf(row.data))!;
+    return section.label + ' ' + (rows.filter(r => sectionOf(r.data) === section.key).indexOf(row) + 1) + '번';
+  };
+  const duplicates = duplicateGroups(rows.map(r => r.data)).map(group => group.map(i => rows[i]));
+  const duplicateIds = new Set(duplicates.flat().map(r => r.id));
   return <section className="card list-card"><h2>지출결의서 목록</h2><p className="hint">복사에는 경비 구분별로 추가한 영수증 행만 포함됩니다. 추가 시 일자가 빠른 순으로 들어가며 ▲▼로 순서를 바꿀 수 있습니다. 새로고침하면 사라집니다.</p>
+    {duplicates.length > 0 && <p className="notice" role="status">일자·거래처·금액이 같은 행이 있습니다: {duplicates.map(group => group.map(label).join(' = ')).join(' / ')}. 같은 영수증이 아닌지 확인해 주세요. 복사는 그대로 할 수 있습니다.</p>}
     {rows.length === 0 ? <div className="empty">아직 추가한 영수증이 없습니다. 위에서 확인한 결과를 목록에 추가하세요.</div> : SECTIONS.map(s => {
       const list = rows.filter(r => sectionOf(r.data) === s.key);
       if (list.length === 0) return null;
@@ -50,7 +59,7 @@ export function ExpenseList({ rows, onChange, onRemove, onMove }: Props) {
         <h3>{s.label} <span className="count">{list.length}건</span></h3>
         {list.length > capacity && <p className="notice">양식의 {s.label} 상세 행은 {capacity}개입니다. 초과분은 붙여넣기 전에 확인하세요.</p>}
         <div className="table-wrap"><table className={'expense-sheet ' + s.key}><SheetHead section={s.key} actions/><tbody>
-          {list.map((r, i) => <tr key={r.id} className={isRowValid(r.data) ? '' : 'row-invalid'}>
+          {list.map((r, i) => <tr key={r.id} className={!isRowValid(r.data) ? 'row-invalid' : duplicateIds.has(r.id) ? 'row-duplicate' : ''}>
             <th className="row-number">{s.first + i}</th><td className="entry-no">{i + 1}</td>
             <ExpenseRowFields data={r.data} section={s.key} onChange={d => onChange(r.id, d)}/>
             <td className="row-actions">

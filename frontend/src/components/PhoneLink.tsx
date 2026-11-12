@@ -38,10 +38,18 @@ export function PhoneLink({ idle, onImage, destination = 'ocr' }: Props) {
     catch { setError('폰 연결을 준비하지 못했습니다. 서버 상태를 확인해 주세요.'); }
   }
   useEffect(() => { openRoom(); }, []);
+  // 새로고침·탭 닫기로 PC 화면이 사라지면 방도 닫는다. 남겨 두면 폰이 받을 곳 없는 방으로 계속 보내게 된다.
+  const roomRef = useRef(room); roomRef.current = room;
+  useEffect(() => {
+    const onHide = () => { if (roomRef.current) closeRoom(roomRef.current, true).catch(() => {}); };
+    window.addEventListener('pagehide', onHide);
+    return () => window.removeEventListener('pagehide', onHide);
+  }, []);
   useEffect(() => { const t = window.setInterval(() => setNow(Date.now()), 1000); return () => window.clearInterval(t); }, []);
 
   useEffect(() => {
     if (!room) return;
+    let stopped = false; // 방이 바뀐 뒤 끝난 조회가 새 방을 또 만들지 않게 한다.
     const timer = window.setInterval(async () => {
       if (polling.current) return; polling.current = true;
       try {
@@ -50,21 +58,26 @@ export function PhoneLink({ idle, onImage, destination = 'ocr' }: Props) {
           return;
         }
         if (idle) {
-          // PC가 비어 있을 때만 다음 사진을 가져온다. 확인 중인 영수증을 덮어쓰지 않기 위해서다.
-          const next = await nextImage(room);
-          setPending(next.pending); setClosesAt(next.closesAt);
-          if (next.image && onImageRef.current(next.image) === false) heldImage.current=next.image;
+          // 서버에 기다리는 사진이 없을 때까지 이어서 가져온다. 화면이 받지 못하면 한 장만 들고 멈춘다.
+          for (;;) {
+            const next = await nextImage(room);
+            setPending(next.pending); setClosesAt(next.closesAt);
+            if (!next.image) break;
+            if (onImageRef.current(next.image) === false) { heldImage.current=next.image; break; }
+            if (next.pending === 0 || stopped) break;
+          }
         } else {
           const st = await checkRoom(room);
           setPending(st.pending); setClosesAt(st.closesAt);
         }
         setError('');
       } catch (e) {
+        if (stopped) return;
         if (isRoomGone(e)) await openRoom(); // 만료되면 새 코드 발급
         else setError('서버와 연결이 불안정합니다.');
       } finally { polling.current = false; }
     }, POLL_MS);
-    return () => window.clearInterval(timer);
+    return () => { stopped = true; window.clearInterval(timer); };
   }, [room, idle]);
 
   if (error && !room) return <section className="card phone-bar"><div className="info"><p className="hint" role="alert">{error}</p></div><button type="button" className="renew" onClick={() => openRoom()}>다시 시도</button></section>;
@@ -75,10 +88,10 @@ export function PhoneLink({ idle, onImage, destination = 'ocr' }: Props) {
     <div className="info">
       <div className="head"><h3>폰으로 촬영해서 보내기</h3><span className="code" aria-label="연결 코드">{room.code}</span></div>
       {idle
-        ? <p className="hint">같은 Wi-Fi에서 폰 카메라로 QR을 찍고 영수증을 촬영하면 {destination === 'print' ? '출력 목록에 추가됩니다' : '왼쪽 미리보기에 들어옵니다'}. 주소에 연결 전용 열쇠가 들어 있어 코드만으로는 보낼 수 없습니다.</p>
+        ? <p className="hint">같은 Wi-Fi에서 폰 카메라로 QR을 찍고 영수증을 촬영하면 {destination === 'print' ? '출력 목록에 추가됩니다' : '왼쪽 미리보기에 들어오고, 여러 장이면 대기 사진으로 표시됩니다'}. 주소에 연결 전용 열쇠가 들어 있어 코드만으로는 보낼 수 없습니다.</p>
         : <p className="hint">폰 연결됨. 확인 중인 영수증을 처리하면 다음 사진을 가져옵니다.</p>}
       <p className="hint meta" role="status">
-        {pending > 0 ? `대기 중인 사진 ${pending}장` : '대기 중인 사진 없음'} · 이 코드 종료까지 {remainingText(closesAt, now)} · 발급 후 {room.maxLifeMinutes}분간 사용 가능{error ? ` · ${error}` : ''}
+        {pending > 0 ? `서버에서 가져올 사진 ${pending}장 · ` : ''}이 코드 종료까지 {remainingText(closesAt, now)} · 발급 후 {room.maxLifeMinutes}분간 사용 가능{error ? ` · ${error}` : ''}
       </p>
     </div>
     <button type="button" className="renew" onClick={() => openRoom(room)}>새 코드 받기</button>
